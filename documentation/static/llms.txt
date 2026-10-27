@@ -27,7 +27,7 @@ Use GDK's Rust crates to assemble an agent or call models directly. Python and K
 - [Demos](/docs/gdk/demos/index.md): Find working projects, source code, and explanations of their architectural choices.
 - [State machine](/docs/gdk/concepts/state-machine.md): Understand execution order, effects, persistence, yielding, and resuming.
 - [Operations](/docs/gdk/concepts/operations.md): Compose behavior, inspect existing implementations, and write your own operation.
-- [Providers](/docs/gdk/concepts/providers.md): Choose or implement a model backend, including declarative providers and local inference.
+- [Providers](/docs/gdk/concepts/providers.md): Choose or implement a model backend, including declarative providers, local inference and voice.
 - [Authentication](/docs/gdk/concepts/authentication.md): Supply provider credentials or integrate your own authentication.
 - [Build an app with goose](/docs/gdk/acp/index.md): Launch goose over ACP, connect, send prompts, and handle streamed updates and permissions.
 - [goose ACP extensions](/docs/gdk/acp/reference.md): Look up goose-specific protocol methods, notifications, and types; use the linked ACP specification for standard methods.

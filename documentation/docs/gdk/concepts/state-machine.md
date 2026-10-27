@@ -4,6 +4,8 @@ description: Compose operations into an agent whose next action is determined by
 displayed_sidebar: gdkSidebar
 ---
 
+import StateMachineDiagram from "@site/static/img/gdk/state-machine.svg";
+
 # State machine
 
 An agent often starts as a loop: call a model, run the tools it requests, and
@@ -28,6 +30,8 @@ For each pass, the machine:
 A step can decline, apply effects and continue, or apply effects and yield.
 If no step applies, the machine yields. A step is not a program counter: the
 next pass starts at the top of the list, not at the following step.
+
+<StateMachineDiagram />
 
 A simple composition looks like this. `tools` and `inference` are instances
 configured by your application, using the same session and effect types:

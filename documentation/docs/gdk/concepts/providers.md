@@ -4,6 +4,8 @@ description: Choose a model backend, use declarative definitions, or implement t
 displayed_sidebar: gdkSidebar
 ---
 
+import ProvidersDiagram from "@site/static/img/gdk/providers.svg";
+
 # Providers
 
 A provider connects your application to a model backend. It translates GDK
@@ -15,6 +17,8 @@ The provider and model are separate choices. A provider knows how to reach a
 service; `ModelConfig` selects a model and request settings. You can use a
 provider directly for a completion, or pass it to an `InferenceRunner` in a
 [state machine](/docs/gdk/concepts/state-machine).
+
+<ProvidersDiagram />
 
 ## The provider contract
 

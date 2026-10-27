@@ -151,6 +151,11 @@ bindings; see the generated language references below for the available API.
 - **[Python](/docs/gdk/sdk/api-reference?language=python):** generated bindings reference.
 - **[Kotlin](/docs/gdk/sdk/api-reference?language=kotlin):** generated bindings reference.
 
+For coding agents or other clients without JavaScript, use the generated
+[Python Markdown reference](pathname:///docs/gdk/sdk/api-reference-python.md) or
+[Kotlin Markdown reference](pathname:///docs/gdk/sdk/api-reference-kotlin.md).
+Both include method anchors and links to their versioned API snapshots.
+
 The Python and Kotlin bindings currently expose model providers, streaming
 completions, and conversation compaction. They do not expose the full agent
 runtime available in Rust.

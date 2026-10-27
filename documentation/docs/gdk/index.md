@@ -16,7 +16,7 @@ management, and the interfaces needed to run an agent inside your application.
 
 ## Explore GDK
 
-### [Hello World](/docs/gdk/hello-world)
+### [Getting Started](/docs/gdk/hello-world)
 
 Build a working agent and see how its pieces fit together.
 

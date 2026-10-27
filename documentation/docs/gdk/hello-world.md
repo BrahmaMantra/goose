@@ -1,5 +1,6 @@
 ---
 title: Hello World
+sidebar_label: Getting Started
 description: Build a small Rust agent with one shell tool, streaming responses, and a saved conversation.
 displayed_sidebar: gdkSidebar
 ---

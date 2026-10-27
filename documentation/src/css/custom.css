@@ -512,3 +512,7 @@ html[data-theme="dark"]:has(.gdk-navigation) {
   --gdk-accent: #c4b5fd;
   --ifm-menu-color-background-active: rgba(196, 181, 253, 0.1);
 }
+
+html:has(.gdk-navigation) .table-of-contents {
+  --ifm-color-primary: var(--gdk-accent);
+}

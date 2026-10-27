@@ -160,15 +160,7 @@ APIs may change between releases.
 
 ## ACP
 
-Use ACP when your application connects to the pre-built goose agent rather than
-embedding the GDK runtime directly.
-
-- [ACP protocol reference](https://agentclientprotocol.com/protocol/v1/overview):
-  standard methods for connecting, managing sessions, sending prompts, and
-  receiving updates.
-- [goose ACP reference](/docs/gdk/acp/reference): generated reference for
-  goose-specific methods, notifications, and types.
-- [ACP SDKs](https://agentclientprotocol.com/libraries): client libraries for
-  implementing the protocol in your application's language.
-
-For a walkthrough, see [Build an app with goose](/docs/gdk/acp).
+For apps that connect to the pre-built goose agent, see the
+[ACP walkthrough](/docs/gdk/acp), the
+[standard protocol reference](https://agentclientprotocol.com/protocol/v1/overview),
+and the generated reference for [goose extensions](/docs/gdk/acp/reference).

@@ -1,6 +1,6 @@
 ---
 title: Build an app with goose
-sidebar_label: Build with goose over ACP
+sidebar_label: Build an app with goose
 description: Launch goose from your application, send prompts, and stream responses over ACP.
 displayed_sidebar: gdkSidebar
 ---
@@ -175,4 +175,4 @@ for authentication and origin flags, and the
 - The [ACP protocol reference](https://agentclientprotocol.com/protocol/v1/overview)
   defines initialization, sessions, prompts, updates, permissions, and cancellation.
 - The [goose ACP reference](/docs/gdk/acp/reference) documents goose-specific
-  methods and types. These are also linked from [Reference](/docs/gdk/reference#acp).
+  methods and types.

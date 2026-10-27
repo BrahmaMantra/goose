@@ -29,13 +29,12 @@ const sidebars: SidebarsConfig = {
         "gdk/concepts/authentication",
       ],
     },
-    "gdk/acp/index",
     {
       type: "category",
-      label: "Reference",
-      link: { type: "doc", id: "gdk/reference/index" },
-      items: [{ type: "doc", id: "gdk/acp/reference", label: "ACP" }],
+      label: "ACP",
+      items: ["gdk/acp/index", "gdk/acp/reference"],
     },
+    "gdk/reference/index",
   ],
 };
 

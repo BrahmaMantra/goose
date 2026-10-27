@@ -522,6 +522,10 @@ const config: Config = {
               label: "Extensions",
               to: "/extensions",
             },
+            {
+              label: "GDK",
+              to: "/docs/gdk/",
+            },
           ],
         },
         {

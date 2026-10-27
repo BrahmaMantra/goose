@@ -59,7 +59,7 @@
 }
 
 .footer a {
-  color: var(--ifm-color-primary);
+  color: var(--ifm-link-color);
   font-weight: 500;
 }
 

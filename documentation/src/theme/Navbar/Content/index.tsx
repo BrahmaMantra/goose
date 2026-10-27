@@ -17,7 +17,7 @@ export default function NavbarContent(): ReactNode {
   }
 
   return (
-    <div className="navbar__inner">
+    <div className="navbar__inner gdk-navigation">
       <div className="navbar__items">
         <NavbarMobileSidebarToggle />
         <NavbarLogo />

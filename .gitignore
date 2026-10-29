@@ -99,3 +99,20 @@ gooseselftest/
 /crates/goose-sdk/examples/uniffi/kotlin/build/
 
 live-in-desktop-design
+
+# BM_ Private runtime data (public repository contains examples and source only)
+/BM_private/
+/BM_local/
+/BM_runtime/
+/BM_custom/**/BM_private/
+/BM_custom/**/BM_local/
+/BM_custom/**/BM_runtime/
+/BM_custom/**/BM_browser_profile*/
+/BM_custom/**/BM_artifacts/
+/BM_custom/**/BM_downloads/
+/BM_custom/**/BM_sessions/
+/BM_custom/**/BM_secrets/
+/BM_custom/**/BM_venv/
+/BM_custom/**/*.local.*
+/BM_custom/**/.env
+/BM_custom/**/.env.*

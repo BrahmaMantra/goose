@@ -1,0 +1,12 @@
+{
+  "BM_account_type": "ordinary_creator",
+  "BM_developer_status": "unknown",
+  "BM_application_type": "unknown",
+  "BM_application_status": "unknown",
+  "BM_client_key": null,
+  "BM_redirect_uri": null,
+  "BM_redirect_registered": false,
+  "BM_approved_scopes": [],
+  "BM_requested_scopes": [],
+  "BM_scope_verified_at": null
+}

@@ -1,3 +1,22 @@
+> **Fork 维护说明**
+>
+> 本仓库是 [aaif-goose/goose](https://github.com/aaif-goose/goose) 的个人 fork，由 [BrahmaMantra](https://github.com/BrahmaMantra) 维护。
+>
+> - 定期通过 **merge** 同步上游，**不使用 rebase** 同步上游，保留本仓库与上游的提交历史。
+> - 尽量以小范围、低侵入的方式修改代码；优先使用配置、Skill/Recipe、MCP 扩展和独立业务模块，减少对上游核心代码的修改。
+> - 保持上游目录结构、许可与版权声明；将定制改动集中在明确的扩展边界，降低后续合并冲突和维护成本。
+> - 合并上游时解决冲突并完成与改动相关的验证，再推送更新。
+>
+> 同步上游的基本流程：
+> ```bash
+> git fetch upstream
+> git switch main
+> git merge upstream/main
+> git push origin main
+> ```
+
+---
+
 <div align="center">
 
 # goose

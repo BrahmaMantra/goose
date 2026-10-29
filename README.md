@@ -5,15 +5,20 @@
 > - 定期通过 **merge** 同步上游，**不使用 rebase** 同步上游，保留本仓库与上游的提交历史。
 > - 尽量以小范围、低侵入的方式修改代码；优先使用配置、Skill/Recipe、MCP 扩展和独立业务模块，减少对上游核心代码的修改。
 > - 保持上游目录结构、许可与版权声明；将定制改动集中在明确的扩展边界，降低后续合并冲突和维护成本。
-> - 合并上游时解决冲突并完成与改动相关的验证，再推送更新。
+> - 本 fork 新增的定制目录、文件、函数、类型、变量和常量等统一以 **`BM_`** 开头，便于识别与上游的差异。上游已有文件名及外部协议要求的名称保持兼容。
+> - 定制改动（包括文档）在独立 **`BM_` 分支**上提交，通过 **Pull Request** 合入本 fork；不直接提交或推送到 `main`，PR 合并由维护者决定。
+> - 本仓库公开可见：只提交通用代码、说明和示例。个人配置、账号资料、凭据、浏览器会话和运行产物保存在仓库外；隐私约定见 [BM_privacy.md](BM_custom/BM_douyin/BM_docs/BM_privacy.md)。
+> - 抖音助手的定制入口：[BM_custom/BM_douyin/BM_README.md](BM_custom/BM_douyin/BM_README.md)。模型控制使用独立脚本。
+> - 同步上游时在独立分支执行 merge，解决冲突并完成与改动相关的验证，再创建 PR。
 >
 > 同步上游的基本流程：
 > ```bash
 > git fetch upstream
-> git switch main
+> git switch -c BM_sync-upstream main
 > git merge upstream/main
-> git push origin main
+> git push -u origin BM_sync-upstream
 > ```
+> 然后创建以本 fork 的 `main` 为目标的 PR；后续同步使用新的 `BM_` 分支名。
 
 ---
 

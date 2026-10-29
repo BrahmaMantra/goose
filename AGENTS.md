@@ -130,3 +130,15 @@ Some workspace crates, including those that make up the GDK, are published to cr
 - CLI: crates/goose-cli/src/main.rs
 - UI: ui/desktop/src/main.ts
 - Agent: crates/goose/src/agents/agent.rs
+
+## BM_ Fork Conventions
+
+- Make custom changes on a dedicated `BM_` branch and open a pull request against this fork's `main`. Commit and push only the feature branch; do not commit or push directly to `main`, and do not merge the PR without user authorization. This also applies to documentation changes.
+- Synchronize this fork with upstream using merge, never rebase.
+- Prefix all newly added custom directories, files, functions, types, variables, constants, and other owned identifiers with `BM_`. Keep additions under `BM_custom/` where practical.
+- Preserve existing upstream filenames and required names from external protocols, CLI options, environment variables, framework entrypoints, and imported APIs. Do not rename these just to add the prefix.
+- Prefer scripts, configuration, Skills/Recipes, and MCP extensions with small changes to upstream code. Keep local model selection and lifecycle controls in independent scripts.
+- Douyin custom documentation starts at `BM_custom/BM_douyin/BM_README.md`. Enable official platform tools only after verifying the application's approved capabilities.
+- This fork is public. Keep personal account details, onboarding status, device/model configuration, absolute local paths, credentials, browser profiles, QR codes, screenshots, downloads, tool output, logs and session data outside the repository. Public files, commit messages, PR titles/descriptions/comments and test evidence must contain generic examples only.
+- Store local configuration and browser artifacts in a private directory outside the checkout with restrictive filesystem permissions. Never force-add ignored private files. Review staged changes for privacy before committing, and review PR text before publishing.
+- `.gitignore` does not protect already tracked files or published history. If private data was published, report the exposure and prepare a cleanup; obtain authorization before rewriting or force-pushing shared history.

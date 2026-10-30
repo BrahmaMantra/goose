@@ -14,6 +14,14 @@ BM_READ_ACCOUNT = r"""async (BM_page) => {
   if (BM_url.origin !== 'https://creator.douyin.com') {
     return {BM_status: 'unsupported_page'};
   }
+  if (BM_url.pathname === '/creator-micro/content/manage') {
+    const BM_home = BM_page.getByRole('menuitem', {name:'首页', exact:true});
+    if (await BM_home.count() !== 1 || !await BM_home.isVisible()) return {BM_status:'unsupported_page'};
+    await BM_home.click();
+    await BM_page.locator('main').getByText(/^抖音号[：:]/).waitFor({state:'visible',timeout:10000});
+  } else if (!['/', '/creator-micro/home'].includes(BM_url.pathname)) {
+    return {BM_status:'unsupported_page'};
+  }
   const BM_label = BM_page.locator('main').getByText(/^抖音号[：:]/);
   const BM_count = await BM_label.count();
   if (BM_count === 0) {
@@ -33,7 +41,8 @@ BM_READ_ACCOUNT = r"""async (BM_page) => {
     return {BM_display_name, BM_douyin_id};
   });
   if (!BM_account) return {BM_status: 'ambiguous_layout'};
-  return {BM_status: 'authenticated', BM_source_url: BM_url.origin + BM_url.pathname, ...BM_account};
+  const BM_observed_url = new URL(BM_page.url());
+  return {BM_status: 'authenticated', BM_source_url: BM_observed_url.origin + BM_observed_url.pathname, ...BM_account};
 }"""
 
 

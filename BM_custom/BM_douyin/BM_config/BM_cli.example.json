@@ -1,0 +1,7 @@
+{
+  "BM_schema": 1,
+  "BM_data_dir": "/path/to/.local/BM_douyin/BM_private",
+  "BM_browser_config": "/path/to/.local/BM_douyin/BM_private/BM_browser/BM_browser.local.json",
+  "BM_python_bin": "/path/to/.local/BM_douyin/BM_venv/bin/python",
+  "BM_goose_bin": "/path/to/.local/BM_douyin/BM_private/BM_goose/goose"
+}

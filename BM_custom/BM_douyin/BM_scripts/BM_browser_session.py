@@ -18,7 +18,7 @@ def BM_private_path(BM_value):
     return BM_path
 
 
-def BM_call_browser(BM_config_path, BM_script):
+def BM_load_browser_config(BM_config_path):
     BM_path = BM_private_path(BM_config_path)
     if stat.S_IMODE(BM_path.stat().st_mode) & 0o077:
         raise ValueError("Private configuration must have mode 0600 or stricter.")
@@ -30,6 +30,12 @@ def BM_call_browser(BM_config_path, BM_script):
     BM_workspace = BM_private_path(BM_config["BM_workspace"])
     if not BM_workspace.is_dir() or stat.S_IMODE(BM_workspace.stat().st_mode) & 0o077:
         raise ValueError("Private browser workspace must have mode 0700 or stricter.")
+    return BM_config
+
+
+def BM_call_browser(BM_config_path, BM_script):
+    BM_config = BM_load_browser_config(BM_config_path)
+    BM_workspace = BM_private_path(BM_config["BM_workspace"])
     with (BM_workspace / "BM_browser.lock").open("a") as BM_lock:
         try:
             fcntl.flock(BM_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)

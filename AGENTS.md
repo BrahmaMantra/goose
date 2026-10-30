@@ -133,6 +133,8 @@ Some workspace crates, including those that make up the GDK, are published to cr
 
 ## BM_ Fork Conventions
 
+- This project's final goal is to learn Goose internals progressively through real applications. Start with application integration, trace the actual source and execution path, then pursue bounded, validated core experiments when appropriate. Follow [the architecture and learning roadmap](BM_custom/BM_docs/BM_architecture_and_goose_learning.md); source paths in older guidance may have changed.
+- Keep platform business rules in application modules. Core experiments should address reusable mechanisms with a concrete question and verification plan; learning internals is an explicit project goal, not a reason to keep all future work permanently outside the core.
 - Make custom changes on a dedicated `BM_` branch and open a pull request against this fork's `main`. Commit and push only the feature branch; do not commit or push directly to `main`, and do not merge the PR without user authorization. This also applies to documentation changes.
 - Synchronize this fork with upstream using merge, never rebase.
 - Prefix all newly added custom directories, files, functions, types, variables, constants, and other owned identifiers with `BM_`. Keep additions under `BM_custom/` where practical.

@@ -15,7 +15,7 @@
 | `just account` | 直接读取账号状态，不调用模型 |
 | `just works 3` | 直接读取受限作品卡片，不调用模型 |
 | `just probe account` / `just probe works` | Goose 无模型工具验证 |
-| `just agent "检查登录状态，成功后读取最多3条作品"` | DeepSeek 驱动的任务，产生 API 调用 |
+| `just agent "检查登录状态，成功后读取最多3条作品"` | Goose + LLM 执行任务，按配置的模型服务计费 |
 | `just results works` / `just results account` / `just results agent` | 查看最近保存的本地结果，终端可能显示个人数据 |
 
 任务文本作为单个带引号的参数传递。若文本含 `$` 或反引号，建议在终端使用单引号包住完整任务，避免 Shell 展开；Just 转发参数时也进行 Shell 引用。

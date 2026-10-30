@@ -1,6 +1,6 @@
-# DeepSeek 驱动的只读 Agent
+# Goose + LLM 只读 Agent
 
-`BM_douyin agent run` 使用 Goose 正常的 Agent 执行流程，通过官方 DeepSeek Provider 选择并调用本地 MCP 工具。它与无模型的 `goose probe` 分开，不启动本地 Ollama 模型。
+`BM_douyin agent run` 使用 Goose 正常的 Agent 执行流程，由配置的 LLM 选择工具，Goose 调用本地 MCP 扩展。LLM 是可替换的模型角色；当前 CLI 已实现并验证的接入是官方 DeepSeek Provider，其他 Provider 尚未接入该启动脚本。它与无模型的 `goose probe` 分开，当前不会启动本地 Ollama 模型。
 
 ```bash
 cd /path/to/goose/BM_custom/BM_douyin

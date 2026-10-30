@@ -40,7 +40,7 @@ BM_works BM_limit="3":
 BM_probe BM_tool="account":
     @just --justfile BM_douyin/Justfile BM_probe {{quote(BM_tool)}}
 
-[doc('将带引号的任务交给 Goose + DeepSeek；只读工具，作品最多3条；产生 API 费用')]
+[doc('将带引号的任务交给 Goose + LLM；只读工具，作品最多3条；按模型服务计费')]
 BM_agent BM_task:
     @just --justfile BM_douyin/Justfile BM_agent {{quote(BM_task)}}
 

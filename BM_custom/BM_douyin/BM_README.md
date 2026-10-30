@@ -39,6 +39,8 @@ run 正常结束或被中断后会请求卸载本次别名。模型别名和 Goo
 
 ## 抖音接入
 
+网页路线已有独立的 [基础信息读取工具](BM_docs/BM_browser_access.md)：复用已登录的 Playwright CLI 会话，读取页面上的昵称和抖音号，真实结果只存放在仓库外；终端仅显示脱敏状态。它不实现 OpenAPI OAuth，也不启动模型。
+
 不启动模型的步骤、用户需要提供的信息和 MCP 直接验证命令见 [接入流程](BM_docs/BM_onboarding.md)。目前增加了 `BM_check_access` 接入预检 MCP 工具，已验证 SDK 通信；它不调用抖音业务接口。
 
 先阅读 [官方接入核查](BM_docs/BM_official_access.md)。以开放平台控制台当前状态、具体应用类型和获批 Scope 为接入依据；创作者中心网页功能不直接等同于公开 API。

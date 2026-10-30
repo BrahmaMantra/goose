@@ -1,0 +1,6 @@
+{
+  "BM_node_bin": "/path/to/BM_node/bin/node",
+  "BM_cli_script": "/path/to/node_modules/@playwright/cli/playwright-cli.js",
+  "BM_workspace": "/path/to/BM_private/BM_browser",
+  "BM_session": "BM_douyin"
+}

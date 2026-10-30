@@ -20,7 +20,7 @@ OpenAPI 路线需要合适主体、应用、获批 Scope 与登记的 HTTPS 回�
 
 使用网页路线时，先核对平台要求与页面实际支持的操作，再由用户在官方页面完成扫码/验证；初始验证只读取页面实际显示的基础信息。登录会话留在专用本地浏览器，不要求用户发送 Cookie，不复刻创作者中心私有接口，不绕过验证码。页面自动化对布局和会话状态有依赖，不能承诺与官方 API 相同的稳定性。
 
-Goose 官方提供 [Playwright 扩展接入说明](https://goose-docs.ai/docs/mcp/playwright-mcp/)，可复用上游浏览器 MCP 能力，无需修改 Goose 内核。本次仅核对扩展文档与官方入口，尚未打开登录浏览器或确认账号基础信息所在的页面/元素；不编造页面字段与选择器。此路线同样可以先直接调用浏览器工具验证，保持模型不启动。
+Goose 官方提供 [Playwright 扩展接入说明](https://goose-docs.ai/docs/mcp/playwright-mcp/)，可复用上游浏览器能力，无需修改 Goose 内核。独立的 [网页基础信息读取](BM_browser_access.md)已通过 Playwright CLI 验证真实页面结构与只读提取；目前直接调用命名会话，尚未绑定到 Goose 工具层，验证时保持模型不启动。
 
 ## 当前进度
 
@@ -28,6 +28,7 @@ Goose 官方提供 [Playwright 扩展接入说明](https://goose-docs.ai/docs/mc
 | --- | --- | --- |
 | Python MCP 扩展 | 已实现并验证 | 官方 SDK 客户端完成 initialize、tools/list、tools/call |
 | 接入配置预检 | 已实现并验证 | 列出缺项，未授权账号不标记为可用 |
+| 独立网页基础信息读取 | 已实现并验证 | 通过已有浏览器会话读取昵称和页面抖音号，真实结果留在私有目录 |
 | Goose 加载扩展 | 待验证 | 安装 Goose CLI/桌面端后验证加载；当前只验证 SDK 客户端通信 |
 | 官方 OAuth | 待应用与回调信息 | 扫码、校验一次性 state、回调换取 Token，处理拒绝和过期 |
 | 最小只读 API | 待获批权限 | 用户授权后直接调用对应官方接口，核对真实响应 |

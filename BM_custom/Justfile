@@ -1,0 +1,40 @@
+# Forward custom tasks to the app directory; leave the upstream root Justfile unchanged.
+default:
+    @just --list
+
+alias prepare := BM_prepare
+alias doctor := BM_doctor
+alias browser-open := BM_browser_open
+alias browser-close := BM_browser_close
+alias account := BM_account
+alias works := BM_works
+alias probe := BM_probe
+alias agent := BM_agent
+alias results := BM_results
+
+BM_prepare:
+    @just --justfile BM_douyin/Justfile BM_prepare
+
+BM_doctor:
+    @just --justfile BM_douyin/Justfile BM_doctor
+
+BM_browser_open:
+    @just --justfile BM_douyin/Justfile BM_browser_open
+
+BM_browser_close:
+    @just --justfile BM_douyin/Justfile BM_browser_close
+
+BM_account:
+    @just --justfile BM_douyin/Justfile BM_account
+
+BM_works BM_limit="3":
+    @just --justfile BM_douyin/Justfile BM_works {{quote(BM_limit)}}
+
+BM_probe BM_tool="account":
+    @just --justfile BM_douyin/Justfile BM_probe {{quote(BM_tool)}}
+
+BM_agent BM_task:
+    @just --justfile BM_douyin/Justfile BM_agent {{quote(BM_task)}}
+
+BM_results BM_kind="works":
+    @just --justfile BM_douyin/Justfile BM_results {{quote(BM_kind)}}

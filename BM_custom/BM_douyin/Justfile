@@ -5,6 +5,7 @@ default:
 alias prepare := BM_prepare
 alias doctor := BM_doctor
 alias browser-open := BM_browser_open
+alias browser-close := BM_browser_close
 alias account := BM_account
 alias works := BM_works
 alias probe := BM_probe
@@ -20,6 +21,9 @@ BM_doctor:
 
 BM_browser_open:
     @./BM_douyin browser open
+
+BM_browser_close:
+    @./BM_douyin browser close
 
 BM_account:
     @./BM_douyin account check

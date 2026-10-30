@@ -1,5 +1,23 @@
 # 独立本地 CLI
 
+## 推荐使用 Just 命令
+
+在 `BM_custom` 或 `BM_custom/BM_douyin` 中都可以运行下列命令，无需直接执行同名目录。父目录的 `Justfile` 将任务转发到应用目录；上游仓库根 Justfile 保持原样。
+
+| 命令 | 用途 |
+| --- | --- |
+| `just` | 列出任务与参数 |
+| `just prepare` | 准备本地入口并打开或复用专用浏览器，不调用模型 |
+| `just doctor` | 检查本地依赖与配置 |
+| `just browser-open` / `just browser-close` | 打开或关闭专用浏览器 |
+| `just account` | 直接读取账号状态，不调用模型 |
+| `just works 3` | 直接读取受限作品卡片，不调用模型 |
+| `just probe account` / `just probe works` | Goose 无模型工具验证 |
+| `just agent "检查登录状态，成功后读取最多3条作品"` | DeepSeek 驱动的任务，产生 API 调用 |
+| `just results works` / `just results account` / `just results agent` | 查看最近保存的本地结果，终端可能显示个人数据 |
+
+任务文本作为单个带引号的参数传递。若文本含 `$` 或反引号，建议在终端使用单引号包住完整任务，避免 Shell 展开；Just 转发参数时也进行 Shell 引用。
+
 进入 `BM_custom/BM_douyin`，运行 `just prepare` 即可准备本地入口并确保专用浏览器已打开。后续直接运行 `./BM_douyin`，无需在终端 source Shell 函数。模型不属于这些启动步骤。
 
 ```bash

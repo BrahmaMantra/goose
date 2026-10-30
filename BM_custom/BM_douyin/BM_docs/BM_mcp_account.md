@@ -1,6 +1,6 @@
 # 无模型验证账号检查 MCP 工具
 
-`BM_mcp_server.py` 暴露两个独立工具：`BM_check_access` 检查 OpenAPI 接入配置；`BM_check_account` 复用本地浏览器读取创作者中心账号头部。网页检查不需要开放平台应用或模型，两个工具的权限与用途不混用。
+`BM_mcp_server.py` 暴露 `BM_check_access` 配置预检、`BM_check_account` 网页账号检查和 [BM_list_works](BM_works_access.md) 受限作品读取。网页检查不需要开放平台应用或模型，各工具的权限与用途不混用。
 
 ## 私有运行配置
 

@@ -1,0 +1,29 @@
+# Justfile is the task runner's conventional entrypoint; owned recipes use BM_.
+default:
+    @just --list
+
+alias prepare := BM_prepare
+alias doctor := BM_doctor
+alias browser-open := BM_browser_open
+alias account := BM_account
+alias works := BM_works
+alias probe := BM_probe
+
+# Prepare the local CLI and ensure the dedicated browser is open. No model starts.
+BM_prepare:
+    @./BM_douyin prepare --open-browser
+
+BM_doctor:
+    @./BM_douyin doctor
+
+BM_browser_open:
+    @./BM_douyin browser open
+
+BM_account:
+    @./BM_douyin account check
+
+BM_works BM_limit="3":
+    @./BM_douyin works list --limit {{quote(BM_limit)}}
+
+BM_probe BM_tool="account":
+    @./BM_douyin goose probe {{quote(BM_tool)}}

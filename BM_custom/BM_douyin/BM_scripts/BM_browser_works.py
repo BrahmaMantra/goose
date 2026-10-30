@@ -15,6 +15,7 @@ BM_READ_WORKS = r"""async (BM_page) => {
   const BM_limit = __BM_LIMIT__;
   const BM_url = new URL(BM_page.url());
   if (BM_url.origin !== 'https://creator.douyin.com') return {BM_status:'unsupported_page'};
+  if (!['/', '/creator-micro/home', '/creator-micro/content/manage'].includes(BM_url.pathname)) return {BM_status:'unsupported_page'};
   if (BM_url.pathname !== '/creator-micro/content/manage') {
     const BM_menu = BM_page.getByRole('menuitem', {name:'内容管理', exact:true});
     if (await BM_menu.count() !== 1 || !await BM_menu.isVisible()) return {BM_status:'unsupported_page'};

@@ -20,7 +20,7 @@ OpenAPI 路线需要合适主体、应用、获批 Scope 与登记的 HTTPS 回�
 
 使用网页路线时，先核对平台要求与页面实际支持的操作，再由用户在官方页面完成扫码/验证；初始验证只读取页面实际显示的基础信息。登录会话留在专用本地浏览器，不要求用户发送 Cookie，不复刻创作者中心私有接口，不绕过验证码。页面自动化对布局和会话状态有依赖，不能承诺与官方 API 相同的稳定性。
 
-Goose 官方提供 [Playwright 扩展接入说明](https://goose-docs.ai/docs/mcp/playwright-mcp/)，可复用上游浏览器能力，无需修改 Goose 内核。独立的 [网页基础信息读取](BM_browser_access.md)已通过 Playwright CLI 验证真实页面结构与只读提取；目前直接调用命名会话，尚未绑定到 Goose 工具层，验证时保持模型不启动。
+Goose 官方提供 [Playwright 扩展接入说明](https://goose-docs.ai/docs/mcp/playwright-mcp/)，可复用上游浏览器能力，无需修改 Goose 内核。[网页基础信息读取](BM_browser_access.md)已通过 Playwright CLI 验证真实页面结构与只读提取，并通过 [MCP 工具](BM_mcp_account.md)完成 SDK 与 Goose 的直接调用验证，保持模型不启动。
 
 ## 当前进度
 
@@ -29,12 +29,12 @@ Goose 官方提供 [Playwright 扩展接入说明](https://goose-docs.ai/docs/mc
 | Python MCP 扩展 | 已实现并验证 | 官方 SDK 客户端完成 initialize、tools/list、tools/call |
 | 接入配置预检 | 已实现并验证 | 列出缺项，未授权账号不标记为可用 |
 | 独立网页基础信息读取 | 已实现并验证 | 通过已有浏览器会话读取昵称和页面抖音号，真实结果留在私有目录 |
-| Goose 加载扩展 | 待验证 | 安装 Goose CLI/桌面端后验证加载；当前只验证 SDK 客户端通信 |
+| Goose 加载扩展与直接调用 | 已通过无模型诊断验证 | 官方 CLI mcp-probe 完成工具发现与账号检查；模型驱动调用仍待验证 |
 | 官方 OAuth | 待应用与回调信息 | 扫码、校验一次性 state、回调换取 Token，处理拒绝和过期 |
 | 最小只读 API | 待获批权限 | 用户授权后直接调用对应官方接口，核对真实响应 |
 | 业务工具与 Skill/Recipe | 待首条流程和接口验证 | 根据真实能力、错误和结果状态实现，再接入模型 |
 
-当前唯一暴露的 MCP 工具是 `BM_check_access`，只读取非敏感配置并列出缺项，不连接抖音账号。尚未实现 OAuth 回调、Token 交换或业务接口。
+当前暴露 `BM_check_access` 配置预检与 `BM_check_account` 网页账号检查，后者只返回脱敏状态，真实值仅保存到指定私有文件。尚未实现 OAuth 回调、Token 交换或发布、评论等业务接口。
 
 ## 用户需要提供的信息
 
@@ -91,7 +91,7 @@ BM_DOUYIN_CONFIG=/path/to/BM_private/BM_access.local.json PYTHONDONTWRITEBYTECOD
 | 参数 | `/path/to/goose/BM_custom/BM_douyin/BM_scripts/BM_mcp_server.py` |
 | 环境变量 | `BM_DOUYIN_CONFIG` 指向实际配置；未设置时使用示例 |
 
-`BM_mcp_check.py` 直接执行协议调用，无需询问模型“有哪些工具”。Goose 内部加载仍需另行验证。
+`BM_mcp_check.py` 直接执行协议调用，无需询问模型“有哪些工具”。Goose 自身的无模型工具加载验证见 [MCP 账号检查](BM_mcp_account.md)。
 
 ## 官方依据
 

@@ -1,0 +1,6 @@
+{
+  "steps": [
+    {"action": "listTools"},
+    {"action": "callTool", "name": "BM_check_account", "arguments": {}}
+  ]
+}

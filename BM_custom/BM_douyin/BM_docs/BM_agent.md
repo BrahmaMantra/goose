@@ -30,6 +30,8 @@ Recipe 使用 Goose 上游的配置结构。运行时生成的 `plugin.json`、`
 
 ## 本地结果与日志
 
+下列 `./BM_douyin` 命令要求当前目录为 `BM_custom/BM_douyin`。在父目录 `BM_custom` 中需要使用 `./BM_douyin/BM_douyin`；入口路径与权限排查见 [CLI 说明](BM_cli.md#区分目录与可执行入口)。
+
 ```bash
 ./BM_douyin results works
 ./BM_douyin results account

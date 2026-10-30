@@ -12,6 +12,20 @@ just prepare
 
 ## 本地目录
 
+### 区分目录与可执行入口
+
+`BM_custom/BM_douyin/` 是目录，其中的 `BM_douyin` 才是可执行文件。下列命令按当前目录选择：
+
+| 当前目录 | 查看结果命令 |
+| --- | --- |
+| 仓库根目录 | `./BM_custom/BM_douyin/BM_douyin results works` |
+| `BM_custom` | `./BM_douyin/BM_douyin results works` |
+| `BM_custom/BM_douyin` | `./BM_douyin results works` 或 `just results works` |
+
+如果终端提示当前目录是 `BM_custom`，执行 `./BM_douyin` 会尝试执行目录，Shell 会报 `permission denied`。进入子目录或使用完整入口路径即可；这不是需要修改目录权限的情况。
+
+`prepare` 生成的 `.local/BM_douyin/BM_bin/BM_douyin` 是另一种入口，在任意目录均可使用其完整路径。如果将该目录加入 PATH 或在已有本地 bin 目录创建指向入口的链接，可直接运行 `BM_douyin results works`，省略 `./`。公开源码不修改用户的 Shell 配置。
+
 默认使用 Goose 仓库同级的 `.local/BM_douyin`，位于 Git 仓库外。`--local-dir` 或 `BM_DOUYIN_LOCAL_DIR` 可以选择其他专用目录。目录名需以 `BM_` 开头。
 
 | 位置 | 内容 |

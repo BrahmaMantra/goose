@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "BM_douyin": {
+      "command": "python3",
+      "args": ["-B", "${PLUGIN_ROOT}/BM_scripts/BM_mcp_entry.py"],
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}

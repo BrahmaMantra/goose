@@ -25,7 +25,7 @@
 
 ## 私有配置与运行
 
-复用 [浏览器配置](../BM_config/BM_browser.example.json)。配置与输出保存在仓库外，沿用 `0600` 文件、`0700` 目录和原子写入规则。共享连接与存储位于 `BM_browser_session.py`，账号和作品读取分别定义自己的页面逻辑和字段。
+复用 [浏览器配置](../BM_config/BM_browser.example.json)。配置与输出保存在仓库外，沿用 `0600` 文件、`0700` 目录和原子写入规则。共享连接位于 `BM_browser_session.py`，私有存储位于 `BM_private_storage.py`，账号和作品读取分别定义自己的页面逻辑和字段。
 
 ```bash
 python3 BM_custom/BM_douyin/BM_scripts/BM_browser_works.py \

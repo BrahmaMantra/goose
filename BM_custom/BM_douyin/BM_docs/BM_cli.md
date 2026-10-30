@@ -14,7 +14,10 @@
 | `just browser-open` / `just browser-close` | 打开或关闭专用浏览器 |
 | `just account` | 直接读取账号状态，不调用模型 |
 | `just works 3` | 直接读取受限作品卡片，不调用模型 |
-| `just probe account` / `just probe works` | Goose 无模型工具验证 |
+| `just probe account` / `just probe works` | Goose 验证 Plugin MCP；作品最多 3 条，不调用模型 |
+| `just configure` | Goose 原生模型配置，可能查询服务元数据 |
+| `just validate` | 校验独立 Recipe，不调用模型 |
+| `just test` / `just test-native` | 合成回归与真实 Goose 回环验证，不调用模型 |
 | `just agent "检查登录状态，成功后读取最多3条作品"` | Goose + LLM 执行任务，按配置的模型服务计费 |
 | `just results works` / `just results account` / `just results agent` | 查看最近保存的本地结果，终端可能显示个人数据 |
 
@@ -72,7 +75,7 @@ just prepare
 
 ## 命令
 
-自然语言任务使用 `./BM_douyin agent run "任务"` 或 `just agent "任务"`，需要私有 DeepSeek 配置并调用远端 API；`./BM_douyin results works`（或 `just results works`）只查看最近的本地记录。执行边界和日志说明见 [BM_agent.md](BM_agent.md)。
+自然语言任务使用 `./BM_douyin agent run "任务"` 或 `just agent "任务"`，使用 Goose 原生私有模型配置，会调用所选模型服务；`./BM_douyin results works`（或 `just results works`）只查看最近的本地记录。执行边界和日志说明见 [BM_agent.md](BM_agent.md)。
 
 | 命令 | 行为 |
 | --- | --- |
@@ -96,3 +99,5 @@ just prepare
 配置 STDIO 扩展时，命令使用本地 `BM_bin/BM_douyin` 的实际路径，参数为 `mcp serve`。本地入口自带私有目录选择，不需要把个人路径或环境变量写到公开代码中。
 
 Goose probe 使用已有的隐藏诊断命令；升级版本后需重新验证。网页字段、私有权限、部分结果范围与模型关闭的边界分别沿用 [账号读取](BM_browser_access.md)、[作品读取](BM_works_access.md)及[隐私约定](BM_privacy.md)。
+
+原生 Plugin、Recipe、模型配置迁移与执行边界见 [BM_native_plugin.md](BM_native_plugin.md)。配置过的模型和 Provider 不受旧模型文件覆盖；当前 CLI 的 Goose 命令使用私有运行根目录及严格 umask。

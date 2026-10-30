@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "PreToolUse": [{"hooks": [{
+      "type": "command",
+      "command": "python3 -B \"${PLUGIN_ROOT}/BM_scripts/BM_guard.py\"",
+      "on_failure": "block",
+      "timeout": 10
+    }]}]
+  }
+}

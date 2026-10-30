@@ -8,7 +8,8 @@ import subprocess
 import sys
 
 
-from BM_browser_session import BM_REPOSITORY, BM_call_browser, BM_private_path, BM_save_private
+from BM_browser_session import BM_call_browser
+from BM_private_storage import BM_private_path, BM_save_private
 BM_READ_ACCOUNT = r"""async (BM_page) => {
   const BM_url = new URL(BM_page.url());
   if (BM_url.origin !== 'https://creator.douyin.com') {

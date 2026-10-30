@@ -7,7 +7,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-from BM_browser_session import BM_call_browser, BM_private_path, BM_save_private
+from BM_browser_session import BM_call_browser
+from BM_private_storage import BM_private_path, BM_save_private
 
 
 BM_MAX_WORKS = 10

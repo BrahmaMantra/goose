@@ -7,7 +7,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 from BM_access_check import BM_check_access as BM_inspect_access, BM_config_path
 from BM_browser_account import BM_read_account
-from BM_browser_session import BM_private_path, BM_save_private
+from BM_private_storage import BM_private_path, BM_save_private
 from BM_browser_works import BM_read_works, BM_works_summary
 
 

@@ -1,14 +1,18 @@
 # 抖音助手接入准备
 
-本目录通过独立脚本和官方能力核查扩展 Goose，不修改 Agent 循环、模型 Provider 或其他内核代码。
+本目录当前通过独立脚本和官方能力核查扩展 Goose，已有接入未修改 Agent 循环、模型 Provider 或其他内核代码。
+
+项目的最终目标是学习并逐步深入 Goose 内核：从应用层的真实任务、MCP 和模型接入出发，沿调用链理解内核，再开展有依据的小范围通用改动。模块化改进、内核改动边界与学习顺序见 [从应用层逐步深入 Goose 内核](../BM_docs/BM_architecture_and_goose_learning.md)。
 
 本 fork 的定制目录、文件以及自定义函数、变量和常量统一以 `BM_` 开头；上游名称、Python 标准库和外部协议字段保持兼容。
 
 ## 独立 CLI 入口
 
-已有 [Goose + LLM Agent 入口](BM_docs/BM_agent.md)：`./BM_douyin agent run "任务"`，以及 `./BM_douyin results works` 本地结果查看。Agent 调用配置的 LLM，仅开放受限只读工具；当前接入为 DeepSeek，`prepare` 和 `goose probe` 仍不调用模型。
+已有 [Goose + LLM Agent 入口](BM_docs/BM_agent.md)：`./BM_douyin agent run "任务"`，以及 `./BM_douyin results works` 本地结果查看。Agent 调用配置的 LLM，仅开放受限只读工具；模型选择使用 Goose 原生配置，`prepare` 和 `goose probe` 不调用模型。
 
 进入本目录执行 `just prepare`，然后使用 `./BM_douyin account check`、`./BM_douyin works list --limit 3` 或 `./BM_douyin goose probe works`。无需 source Shell 配置，个人配置与结果位于仓库同级 `.local/BM_douyin`。完整用法见 [BM_cli.md](BM_docs/BM_cli.md)。prepare 打开专用浏览器并复用登录会话，不启动模型。
+
+原生扩展结构见 [Plugin 与 Recipe](BM_docs/BM_native_plugin.md)，维护与回归见 [模块职责](BM_docs/BM_modules.md)。使用 `just configure` 配置模型，`just validate` 校验 Recipe，`just test` 与 `just test-native` 执行无模型回归。
 
 ## 本地模型
 

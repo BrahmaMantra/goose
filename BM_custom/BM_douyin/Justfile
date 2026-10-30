@@ -1,29 +1,49 @@
-# Justfile is the task runner's conventional entrypoint; owned recipes use BM_.
+# 显示所有命令、用途与参数；不执行浏览器或模型任务
 default:
     @just --list
 
 alias prepare := BM_prepare
 alias doctor := BM_doctor
 alias browser-open := BM_browser_open
+alias browser-close := BM_browser_close
 alias account := BM_account
 alias works := BM_works
 alias probe := BM_probe
+alias agent := BM_agent
+alias results := BM_results
 
-# Prepare the local CLI and ensure the dedicated browser is open. No model starts.
+[doc('准备本地 CLI，并打开或复用专用浏览器；不调用模型')]
 BM_prepare:
     @./BM_douyin prepare --open-browser
 
+[doc('检查本地配置和工具依赖；不读取账号、不调用模型')]
 BM_doctor:
     @./BM_douyin doctor
 
+[doc('打开抖音专用浏览器，复用独立登录资料；需要时在官方页面扫码')]
 BM_browser_open:
     @./BM_douyin browser open
 
+[doc('关闭抖音专用浏览器；保留本地登录资料，不退出抖音账号')]
+BM_browser_close:
+    @./BM_douyin browser close
+
+[doc('读取页面上的账号状态；真实值存本地，终端仅显示脱敏摘要；不调用模型')]
 BM_account:
     @./BM_douyin account check
 
+[doc('读取当前已加载的少量作品，数量1～10；真实值存本地；不调用模型')]
 BM_works BM_limit="3":
     @./BM_douyin works list --limit {{quote(BM_limit)}}
 
+[doc('通过 Goose 直接验证 MCP 工具；参数 account/works；不调用模型')]
 BM_probe BM_tool="account":
     @./BM_douyin goose probe {{quote(BM_tool)}}
+
+[doc('将带引号的任务交给 Goose + LLM；只读工具，作品最多3条；按模型服务计费')]
+BM_agent BM_task:
+    @./BM_douyin agent run {{quote(BM_task)}}
+
+[doc('查看最近本地结果；参数 works/account/agent；会显示个人数据，不抓取、不调用模型')]
+BM_results BM_kind="works":
+    @./BM_douyin results {{quote(BM_kind)}}

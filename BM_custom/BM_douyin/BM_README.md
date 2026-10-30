@@ -6,6 +6,8 @@
 
 ## 独立 CLI 入口
 
+已有 [Goose + LLM Agent 入口](BM_docs/BM_agent.md)：`./BM_douyin agent run "任务"`，以及 `./BM_douyin results works` 本地结果查看。Agent 调用配置的 LLM，仅开放受限只读工具；当前接入为 DeepSeek，`prepare` 和 `goose probe` 仍不调用模型。
+
 进入本目录执行 `just prepare`，然后使用 `./BM_douyin account check`、`./BM_douyin works list --limit 3` 或 `./BM_douyin goose probe works`。无需 source Shell 配置，个人配置与结果位于仓库同级 `.local/BM_douyin`。完整用法见 [BM_cli.md](BM_docs/BM_cli.md)。prepare 打开专用浏览器并复用登录会话，不启动模型。
 
 ## 本地模型

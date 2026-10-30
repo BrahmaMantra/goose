@@ -13,6 +13,7 @@ import tempfile
 from BM_browser_account import BM_read_account
 from BM_browser_session import BM_REPOSITORY, BM_load_browser_config, BM_private_path, BM_save_private
 from BM_browser_works import BM_read_works, BM_works_summary
+from BM_agent import BM_run_agent
 
 
 BM_APP = Path(__file__).resolve().parents[1]
@@ -182,6 +183,9 @@ def BM_main():
     BM_probe_parser.add_argument("tool", choices=["account", "works"], default="account", nargs="?")
     BM_probe_parser.add_argument("--limit", type=int, choices=range(1, 11), default=3)
     BM_commands.add_parser("mcp").add_subparsers(dest="action", required=True).add_parser("serve")
+    BM_agent_parser = BM_commands.add_parser("agent").add_subparsers(dest="action", required=True).add_parser("run")
+    BM_agent_parser.add_argument("task")
+    BM_commands.add_parser("results").add_argument("kind", choices=["account", "works", "agent"])
     BM_args = BM_parser.parse_args()
     try:
         if BM_args.command == "prepare":
@@ -210,6 +214,15 @@ def BM_main():
                 BM_report = BM_works_summary(BM_works, True)
             elif BM_args.command == "goose":
                 BM_report = BM_goose_probe(BM_data, BM_args.tool, BM_args.limit)
+            elif BM_args.command == "agent":
+                BM_report = BM_run_agent(BM_data, BM_environment(BM_data), BM_args.task)
+                print(BM_report["BM_answer"])
+                return 0 if BM_report["BM_run_status"] == "completed" else 2
+            elif BM_args.command == "results":
+                BM_path = BM_private_path(Path(BM_data["BM_data_dir"]) / "BM_results" / ("BM_" + BM_args.kind + ".local.json"))
+                if stat.S_IMODE(BM_path.stat().st_mode) & 0o077:
+                    raise ValueError("Results file must be private.")
+                BM_report = json.loads(BM_path.read_text())
             else:
                 os.chdir(BM_data["BM_data_dir"])
                 os.execve(BM_data["BM_python_bin"], [BM_data["BM_python_bin"], "-B",

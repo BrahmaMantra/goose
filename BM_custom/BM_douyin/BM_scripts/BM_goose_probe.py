@@ -5,24 +5,31 @@ import shlex
 import subprocess
 import tempfile
 
-from BM_local_config import BM_APP, BM_environment
+from BM_local_config import BM_environment
+from BM_goose_setup import BM_prepare_goose
 
 
 def BM_goose_probe(BM_data, BM_tool, BM_limit):
+    if type(BM_limit) is not int or not 1 <= BM_limit <= 3:
+        raise ValueError("Plugin probe reads at most three cards.")
+    BM_prepare_goose(BM_data)
     BM_env = BM_environment(BM_data)
-    BM_extension = shlex.join([BM_key + "=" + BM_env[BM_key] for BM_key in
-        ("BM_DOUYIN_BROWSER_CONFIG", "BM_DOUYIN_ACCOUNT_OUTPUT", "BM_DOUYIN_WORKS_OUTPUT")] +
-        [BM_data["BM_python_bin"], "-B", str(BM_APP / "BM_scripts" / "BM_mcp_server.py")])
+    BM_plugin = Path(BM_data["BM_data_dir"]) / ".agents" / "plugins" / "BM_douyin"
+    BM_extension = shlex.join([BM_data["BM_python_bin"], "-B", str(BM_plugin / "BM_scripts" / "BM_mcp_entry.py")])
     BM_name = "BM_check_account" if BM_tool == "account" else "BM_list_works"
     with tempfile.NamedTemporaryFile(mode="w", prefix="BM_probe_", suffix=".json",
             dir=Path(BM_data["BM_data_dir"]) / "BM_results", delete=False) as BM_file:
-        json.dump({"steps": [{"action": "listTools"}, {"action": "callTool", "name": BM_name,
-            "arguments": {"BM_limit": BM_limit} if BM_tool == "works" else {}}]}, BM_file)
+        BM_steps = [{"action": "listTools"}]
+        if BM_tool == "works":
+            BM_steps.append({"action": "callTool", "name": "BM_check_account", "arguments": {}})
+        BM_steps.append({"action": "callTool", "name": BM_name,
+                         "arguments": {"BM_limit": BM_limit} if BM_tool == "works" else {}})
+        json.dump({"steps": BM_steps}, BM_file)
         BM_script = Path(BM_file.name)
     try:
         BM_result = subprocess.run([BM_data["BM_goose_bin"], "mcp-probe", BM_extension,
             "--script", str(BM_script)], env=BM_env, cwd=BM_data["BM_data_dir"],
-            capture_output=True, text=True, timeout=60, check=False)
+            capture_output=True, text=True, timeout=60, umask=0o077, check=False)
     finally:
         BM_script.unlink(missing_ok=True)
     if BM_result.returncode:

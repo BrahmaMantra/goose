@@ -12,6 +12,7 @@ from BM_browser_account import BM_read_account
 from BM_browser_commands import BM_browser_command, BM_browser_open
 from BM_browser_works import BM_read_works, BM_works_summary
 from BM_goose_probe import BM_goose_probe
+from BM_goose_setup import BM_RECIPE, BM_goose_environment, BM_prepare_goose
 from BM_local_config import BM_APP, BM_DEFAULT_LOCAL, BM_config, BM_doctor, BM_environment, BM_prepare
 from BM_private_storage import BM_private_path, BM_save_private
 
@@ -29,9 +30,14 @@ def BM_main():
     BM_commands.add_parser("account").add_subparsers(dest="action", required=True).add_parser("check")
     BM_works_parser = BM_commands.add_parser("works").add_subparsers(dest="action", required=True).add_parser("list")
     BM_works_parser.add_argument("--limit", type=int, choices=range(1, 11), default=3)
-    BM_probe_parser = BM_commands.add_parser("goose").add_subparsers(dest="action", required=True).add_parser("probe")
+    BM_goose_commands = BM_commands.add_parser("goose").add_subparsers(dest="action", required=True)
+    BM_goose_commands.add_parser("configure", help="Use native Goose configuration; may query provider metadata")
+    BM_goose_commands.add_parser("validate", help="Validate the native Recipe without calling a model")
+    BM_probe_parser = BM_goose_commands.add_parser("probe")
     BM_probe_parser.add_argument("tool", choices=["account", "works"], default="account", nargs="?")
-    BM_probe_parser.add_argument("--limit", type=int, choices=range(1, 11), default=3)
+    BM_probe_parser.add_argument("--limit", type=int, choices=range(1, 4), default=3)
+    BM_test_parser = BM_commands.add_parser("test", help="Run synthetic regressions without a browser or model")
+    BM_test_parser.add_argument("--native", action="store_true", help="Exercise real Goose against a loopback fixture")
     BM_commands.add_parser("mcp").add_subparsers(dest="action", required=True).add_parser("serve")
     BM_agent_parser = BM_commands.add_parser("agent").add_subparsers(dest="action", required=True).add_parser("run")
     BM_agent_parser.add_argument("task")
@@ -63,7 +69,19 @@ def BM_main():
                 BM_save_private(Path(BM_data["BM_data_dir"]) / "BM_results" / "BM_works.local.json", BM_works)
                 BM_report = BM_works_summary(BM_works, True)
             elif BM_args.command == "goose":
-                BM_report = BM_goose_probe(BM_data, BM_args.tool, BM_args.limit)
+                if BM_args.action == "probe":
+                    BM_report = BM_goose_probe(BM_data, BM_args.tool, BM_args.limit)
+                else:
+                    BM_prepare_goose(BM_data)
+                    BM_env = BM_goose_environment(BM_environment(BM_data), Path(BM_data["BM_data_dir"]) / "BM_goose_state")
+                    BM_arguments = (["configure"] if BM_args.action == "configure" else ["recipe", "validate", str(BM_RECIPE)])
+                    return subprocess.run([BM_data["BM_goose_bin"], *BM_arguments],
+                        env=BM_env, cwd=BM_data["BM_data_dir"], umask=0o077, check=False).returncode
+            elif BM_args.command == "test":
+                BM_script = "BM_native_integration.py" if BM_args.native else "BM_regression.py"
+                BM_arguments = ["--goose-bin", BM_data["BM_goose_bin"]] if BM_args.native else []
+                return subprocess.run([BM_data["BM_python_bin"], "-B", str(BM_APP / "BM_tests" / BM_script), *BM_arguments],
+                    check=False).returncode
             elif BM_args.command == "agent":
                 BM_report = BM_run_agent(BM_data, BM_environment(BM_data), BM_args.task)
                 print(BM_report["BM_answer"])

@@ -9,6 +9,7 @@ def BM_summary(BM_stdout):
     BM_advertised = set()
     BM_last_assistant = None
     BM_request_messages = set()
+    BM_request_names = {}
     for BM_line in BM_stdout.splitlines():
         try:
             BM_event = json.loads(BM_line)
@@ -29,17 +30,23 @@ def BM_summary(BM_stdout):
                 BM_call = BM_block.get("toolCall", {})
                 if BM_call.get("status") == "success":
                     BM_value = BM_call["value"]
+                    BM_request_names[BM_block.get("id")] = BM_value["name"]
                     BM_calls.append({"BM_name": BM_value["name"], "BM_arguments": BM_value.get("arguments", {})})
             elif BM_block.get("type") == "toolResponse":
                 BM_result = BM_block.get("toolResult", {})
                 if BM_result.get("status") != "success" or BM_result.get("value", {}).get("isError"):
                     BM_results.append({"BM_status": "tool_error"})
                     continue
+                if BM_request_names.get(BM_block.get("id")) == "load_skill":
+                    BM_results.append({"BM_status": "skill_loaded"})
+                    continue
                 try:
                     BM_value = json.loads("".join(BM_part.get("text", "") for BM_part in BM_result["value"]["content"]))
                     BM_allowed = {"BM_status", "BM_fields_present", "BM_private_result_saved", "BM_scope", "BM_complete", "BM_items_read", "BM_more_loaded"}
                     if isinstance(BM_value, dict) and not set(BM_value) - BM_allowed:
                         BM_results.append(BM_value)
+                    else:
+                        BM_results.append({"BM_status": "unexpected_tool_result"})
                 except (ValueError, KeyError, TypeError):
                     BM_results.append({"BM_status": "unexpected_tool_result"})
     BM_final = BM_messages.get(BM_last_assistant, "") if BM_last_assistant not in BM_request_messages else ""

@@ -11,6 +11,10 @@ alias works := BM_works
 alias probe := BM_probe
 alias agent := BM_agent
 alias results := BM_results
+alias configure := BM_configure
+alias validate := BM_validate
+alias test := BM_test
+alias test-native := BM_test_native
 
 [doc('准备本地 CLI，并打开或复用专用浏览器；不调用模型')]
 BM_prepare:
@@ -36,7 +40,7 @@ BM_account:
 BM_works BM_limit="3":
     @./BM_douyin works list --limit {{quote(BM_limit)}}
 
-[doc('通过 Goose 直接验证 MCP 工具；参数 account/works；不调用模型')]
+[doc('通过 Goose 验证 Plugin MCP；参数 account/works，作品最多3条；不调用模型')]
 BM_probe BM_tool="account":
     @./BM_douyin goose probe {{quote(BM_tool)}}
 
@@ -47,3 +51,19 @@ BM_agent BM_task:
 [doc('查看最近本地结果；参数 works/account/agent；会显示个人数据，不抓取、不调用模型')]
 BM_results BM_kind="works":
     @./BM_douyin results {{quote(BM_kind)}}
+
+[doc('进入 Goose 原生模型配置；不执行任务，可能查询模型服务元数据')]
+BM_configure:
+    @./BM_douyin goose configure
+
+[doc('使用 Goose 校验独立 Recipe；不读取账号、不调用模型')]
+BM_validate:
+    @./BM_douyin goose validate
+
+[doc('运行合成回归；不读取账号与模型配置、不启动浏览器、不调用模型')]
+BM_test:
+    @./BM_douyin test
+
+[doc('用真实 Goose、回环模拟响应与合成 MCP 验证 Plugin；不调用模型或抖音')]
+BM_test_native:
+    @./BM_douyin test --native

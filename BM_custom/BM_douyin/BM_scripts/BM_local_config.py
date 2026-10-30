@@ -55,11 +55,13 @@ def BM_doctor(BM_data):
     except (OSError, ValueError, TypeError):
         BM_checks["BM_browser_config"] = False
     BM_checks["BM_mcp_sdk"] = False
+    BM_checks["BM_yaml"] = False
     if BM_checks["BM_python"]:
         BM_probe = subprocess.run([BM_data["BM_python_bin"], "-B", "-c",
-            "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('mcp') else 1)"],
-            capture_output=True, timeout=10, check=False)
-        BM_checks["BM_mcp_sdk"] = BM_probe.returncode == 0
+            "import importlib.util,json; print(json.dumps([importlib.util.find_spec('mcp') is not None, importlib.util.find_spec('yaml') is not None]))"],
+            capture_output=True, text=True, timeout=10, check=False)
+        if BM_probe.returncode == 0:
+            BM_checks["BM_mcp_sdk"], BM_checks["BM_yaml"] = json.loads(BM_probe.stdout)
     return {"BM_ready": all(BM_checks.values()), "BM_checks": BM_checks}
 
 
@@ -87,6 +89,9 @@ def BM_prepare(BM_local):
     finally:
         BM_temporary.unlink(missing_ok=True)
     BM_status = BM_doctor(BM_data)
+    from BM_goose_setup import BM_prepare_goose
+    if BM_status["BM_ready"]:
+        BM_status.update(BM_prepare_goose(BM_data))
     BM_status.update(BM_local_dir=str(BM_root), BM_cli_entry=str(BM_launcher))
     return BM_data, BM_status
 

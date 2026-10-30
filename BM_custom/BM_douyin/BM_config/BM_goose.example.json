@@ -1,0 +1,4 @@
+{
+  "GOOSE_PROVIDER": "openai",
+  "GOOSE_MODEL": "example-model"
+}

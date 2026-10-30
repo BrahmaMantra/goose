@@ -17,13 +17,17 @@ def BM_private_path(BM_value):
 
 
 def BM_save_private(BM_output, BM_report):
+    BM_write_private_text(BM_output, json.dumps(BM_report, ensure_ascii=False, indent=2) + "\n")
+
+
+def BM_write_private_text(BM_output, BM_text):
     BM_path = BM_private_path(BM_output)
     if not BM_path.parent.is_dir() or stat.S_IMODE(BM_path.parent.stat().st_mode) & 0o077:
         raise ValueError("Output directory must exist with mode 0700 or stricter.")
     with tempfile.NamedTemporaryFile(mode="w", prefix="BM_result_", dir=BM_path.parent, delete=False) as BM_file:
         BM_temporary = Path(BM_file.name)
         try:
-            BM_file.write(json.dumps(BM_report, ensure_ascii=False, indent=2) + "\n")
+            BM_file.write(BM_text)
             BM_file.flush()
             os.replace(BM_temporary, BM_path)
         finally:

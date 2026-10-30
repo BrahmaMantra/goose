@@ -1,0 +1,8 @@
+{
+  "BM_skill": "BM_readonly",
+  "BM_disabled_extensions": ["developer", "analyze", "apps", "extensionmanager", "scheduler", "summon", "summarize", "todo", "chatrecall", "code_execution", "tom"],
+  "BM_tools": {
+    "bm_douyin_bm_douyin__BM_check_account": {"BM_arguments": "empty"},
+    "bm_douyin_bm_douyin__BM_list_works": {"BM_arguments": "limit", "BM_max_limit": 3}
+  }
+}

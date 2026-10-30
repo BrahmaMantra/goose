@@ -1,49 +1,75 @@
 # Goose + LLM 只读 Agent
 
-`BM_douyin agent run` 使用 Goose 正常的 Agent 执行流程，由配置的 LLM 选择工具，Goose 调用本地 MCP 扩展。LLM 是可替换的模型角色；当前 CLI 已实现并验证的接入是官方 DeepSeek Provider，其他 Provider 尚未接入该启动脚本。它与无模型的 `goose probe` 分开，当前不会启动本地 Ollama 模型。
+`BM_douyin agent run` 使用 Goose 原生 Plugin、Recipe 和模型配置。Goose 加载 Skill，调用 Plugin 声明的 MCP 服务，并执行 PreToolUse Hook。我们的 Python 脚本负责本地资源准备、运行隔离、事件摘要和私有结果；未修改 Goose 内核。
+
+## 使用
+
+在 `BM_custom/BM_douyin` 中执行：
 
 ```bash
-cd /path/to/goose/BM_custom/BM_douyin
 just prepare
-./BM_douyin agent run "检查登录状态，成功后读取最多3条作品，简短报告结果"
-# 同一入口的 Just 别名
+just validate
+just probe account
+just probe works
+
+# 进入 Goose 原生模型配置，可能查询服务元数据；不执行 Agent 任务
+just configure
+
+# 调用配置的 LLM；可能产生 API 费用或加载本地服务中的模型
 just agent "检查登录状态，成功后读取最多3条作品，简短报告结果"
 ```
 
-## 私有模型配置
+`prepare` 准备本地 CLI 和 Plugin，并打开或复用专用浏览器，不调用模型。首次已有旧模型配置时，在本地导入到 Goose 原生配置；已配置的 Provider 和模型不会被旧文件覆盖。普通 `prepare` 没有 `--open-browser` 时不打开浏览器。
 
-在 CLI 配置的 `BM_data_dir` 下保存 `BM_deepseek.local.json`，权限必须为 `0600` 或更严格。格式参考 [公开示例](../BM_config/BM_deepseek.example.json)。目前只支持官方 `https://api.deepseek.com`（允许 `/v1` 基础路径）；实际调用由 Goose 的 `custom_deepseek` Provider 完成。其他网关需单独核验，不会自动替换请求目标。
+## 模型配置
 
-密钥通过进程环境供 Provider 鉴权，不放入命令参数、Recipe、Prompt 或工具返回。配置、日志、任务、结果都在仓库外。调用远端模型会产生 API 费用；不要将敏感信息写入用户任务，任务文本本身会发送给服务方。
+配置位于本地 `BM_data_dir/BM_goose_state/config/config.yaml`，禁用系统钥匙串时凭据位于同目录 `secrets.yaml`。文件权限为 `0600`，私有目录为 `0700`。使用 `just configure` 调用 Goose 自己的配置界面；修改 Provider 和模型后无需编辑业务代码。
 
-## 执行限制
+[配置示例](../BM_config/BM_goose.example.json)与[凭据示例](../BM_config/BM_goose_secrets.example.json)仅含通用占位值。JSON 是 YAML 的兼容写法，可以用于原生 `config.yaml` 和 `secrets.yaml`；Goose 配置界面也可以写正常 YAML。YAML 解析依赖固定在 [BM_requirements.txt](../BM_config/BM_requirements.txt)，由配置的 Python 环境执行，CLI 引导入口继续使用标准库。
 
-- 每次运行使用新的私有 Recipe、工作目录和 Goose 状态，显式扩展列表只包含抖音只读 MCP 服务，不复用以前的会话。
-- Agent 模式 MCP 只注册 `BM_check_account` 和 `BM_list_works`。先确认本次服务实例的账号检查返回 authenticated，才允许读取作品；上限固定为3条。
-- Goose `PreToolUse` 钩子只放行这两个工具及受限参数；钩子执行失败时阻止调用。`load_skill` 仍可能被 Goose 核心提供，但钩子拒绝它；不宣称工具从模型可见列表中完全消失。
-- 限制5个连续 Agent 步骤、每轮512输出 Token、重复调用次数，单次运行超时180秒。进程锁拒绝同时启动两个本地 Agent；这些是运行限制，不是 API 费用的精确预算。
-- 模型收到状态、字段存在性、读取数量与部分结果范围；真实昵称、抖音号和作品文字只由工具保存在本地结果文件。
+旧 `BM_deepseek.local.json` 只用于首次迁移；运行入口不再读取它，也不再传固定的 `--provider` 或 `--model`。旧文件保留在本地，完成迁移后可自行归档。其他 Provider 的兼容性以实际服务和 Goose 支持情况为准，本次没有运行真实模型推理。当前边界针对由 Goose 执行工具循环的模型接入；自行管理工具循环的托管 Agent Provider 需要单独验证。
 
-Recipe 使用 Goose 上游的配置结构。运行时生成的 `plugin.json`、`hooks/hooks.json`、`.agents` 等名称是上游发现机制要求，均位于私有运行目录；公开自定义文件和函数使用 `BM_` 前缀。Goose 未修改。
+用户任务会发送给所选模型服务，不要包含凭据或个人敏感信息。模型凭据不放在 Recipe、Prompt 或 MCP 返回中；MCP 启动器只传业务环境变量，不继承模型凭据。
 
-工具会在已支持的首页与内容管理间导航，不执行发布、修改、删除、评论、导出、翻页或任意 Shell 操作。网站布局、会话和网络失败仍可能导致无法完成。钩子和部署配置属于本地可信边界，不防御具有本机配置修改权限的操作者。
+## 执行与权限
 
-## 本地结果与日志
+- 每次执行创建新的私有运行目录，快照 Goose 原生配置和凭据；不复用此前会话。
+- 每次运行只部署 `BM_douyin` Plugin，移除配置快照中的其他扩展与 Plugin 条目，并显式禁用已核查的默认平台扩展。Recipe 不列显式扩展，由 Goose 自动发现 Plugin 的 MCP 服务；不使用 `--no-profile`。
+- Plugin 提供 `BM_readonly` Skill；Hook 只允许加载这个确切名称，不允许其他 Skill、支持文件路径或附加 Skill 参数。
+- MCP 使用 Plugin 命名空间；账号和作品工具实际名称为 `bm_douyin_bm_douyin__BM_check_account` 和 `bm_douyin_bm_douyin__BM_list_works`。工具说明及 Skill 使用业务名称，Goose 负责命名空间。
+- Hook 只放行这两个业务工具及严格参数。MCP Agent 模式只注册这两个工具，要求本服务实例先检查账号成功，作品上限为 3。
+- Recipe 限制 5 个连续 Agent 步骤，运行限制每轮 512 输出 Token、重复调用次数及 180 秒超时；进程锁拒绝并行本地 Agent。这些限制不能精确保证 API 费用。
 
-下列 `./BM_douyin` 命令要求当前目录为 `BM_custom/BM_douyin`。在父目录 `BM_custom` 中需要使用 `./BM_douyin/BM_douyin`；入口路径与权限排查见 [CLI 说明](BM_cli.md#区分目录与可执行入口)。
+当前验证版本中，模型可见工具为 `load_skill` 和两个业务工具。Goose 仍可能列出内置 Skill 的知识条目，Hook 只允许加载指定 Skill。升级后需复测默认扩展集合和工具暴露，不能用当前验证承诺未来所有版本。Hook、配置快照和私有目录不是 OS 沙箱，也不能防御有本机配置修改权限的操作者。
+
+模型仅收到状态、字段存在性、读取数量和范围。真实昵称、抖音号及作品文字只写本地。工具在支持的首页和内容管理页之间导航，不执行发布、修改、删除、评论、翻页或导出。网页布局与登录状态变化仍会造成失败。
+
+## 结果与诊断
 
 ```bash
-./BM_douyin results works
-./BM_douyin results account
-./BM_douyin results agent
+just results works
+just results account
+just results agent
 ```
 
-结果查看是显式的本地操作，会在终端显示真实作品/账号数据；不会调用模型、重新读取浏览器或上传 GitHub。请勿把该终端输出复制到公开材料。它显示最近保存的一次结果，需核对观察时间；未执行作品读取时，不能把先前结果当成本次结果。
+结果查看是显式本地操作，会显示个人数据，不调用模型或重新读取浏览器。显示的是最近保存的一次结果，应核对时间；此前结果不能替代本次工具执行证据。
 
-`BM_results/BM_agent.local.json` 保存最近一次 Agent 状态、回答、实际调用记录、工具返回和模型可见工具名。每次运行的 `BM_agent_*` 私有目录保留独立日志和记录。终端默认只显示模型最终答复；过程错误、超时或工具失败使用脱敏的未完成提示并返回非零退出码。模型的自然语言答复不替代工具执行证据。
+每次运行保留私有日志和 Agent 报告，最新报告为 `BM_results/BM_agent.local.json`。终端只显示最终答复；错误或超时返回安全提示与非零退出码。事件摘要记录 Skill 加载状态，不将 Skill 正文当作业务 JSON；进程正常退出不等于业务成功，应结合实际工具调用和返回。
 
-Goose 可能在步数上限前生成解释或拒绝答复；进程正常退出不意味着任何业务成功，需结合 `BM_tool_calls` 和 `BM_tool_results` 判断。模型原始流式输出保存在私有日志中，不向终端回放思考文本。保存前会移除配置密钥字面量，日志仍按敏感资料管理。
+Goose 子进程使用 `umask=077`，prepare 会修复本应用原生配置的文件权限。保存日志前移除原生凭据文件和鉴权环境中的凭据字面量，日志仍按敏感资料管理。应用任务与业务结果存储独立于 Goose 会话。
 
-## 验证范围
+## 无模型验证
 
-已验证官方 DeepSeek 请求、Goose 真实工具调用和账号检查后的受限作品读取。提示规则区分“本地读取真实值”与“模型获得脱敏摘要”，以及部分列表与完整作品库。异常和授权状态必须以真实结果为准，不保证模型所有表述均准确。配置和执行边界遵循 [隐私约定](BM_privacy.md)。
+```bash
+just test
+just test-native
+just validate
+just probe account
+just probe works
+```
+
+`test` 使用临时目录和合成数据，覆盖原生配置迁移、配置保留、权限、事件解析及超时脱敏。`test-native` 使用真实 Goose CLI、本机回环 HTTP 模拟响应和合成 MCP 服务，验证 Plugin 自动加载、Skill、工具命名空间、参数拒绝及 Hook 失败阻止执行；不连接真实模型服务或抖音，不读取真实账号或模型配置。
+
+`validate` 仅校验 Recipe。`probe` 通过 Plugin 启动器和 Goose mcp-probe 读取真实网页，不调用模型；作品探测先检查账号，上限为 3。直接 CLI `works list` 仍支持最多 10 条，属于无模型手动操作。
+
+结构和学习入口见 [原生 Plugin 说明](BM_native_plugin.md)，隐私约束见 [BM_privacy.md](BM_privacy.md)。

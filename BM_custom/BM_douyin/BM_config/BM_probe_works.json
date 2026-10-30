@@ -1,0 +1,6 @@
+{
+  "steps": [
+    {"action": "listTools"},
+    {"action": "callTool", "name": "BM_list_works", "arguments": {"BM_limit": 3}}
+  ]
+}

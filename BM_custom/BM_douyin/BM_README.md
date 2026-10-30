@@ -10,6 +10,8 @@
 
 进入本目录执行 `just prepare`，然后使用 `./BM_douyin account check`、`./BM_douyin works list --limit 3` 或 `./BM_douyin goose probe works`。无需 source Shell 配置，个人配置与结果位于仓库同级 `.local/BM_douyin`。完整用法见 [BM_cli.md](BM_docs/BM_cli.md)。prepare 打开专用浏览器并复用登录会话，不启动模型。
 
+维护时可参考 [模块职责与无模型回归](BM_docs/BM_modules.md)。
+
 ## 本地模型
 
 模型与设备的实际配置仅保存在本地。运行前设置 `BM_LOCAL_MODEL`，或通过 `--model` 指定已安装的 Ollama 模型；公开仓库不包含个人模型标签、硬件规格或本机检查输出。check 只读取服务、模型与驻留状态，不执行推理。

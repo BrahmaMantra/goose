@@ -8,6 +8,8 @@ alias browser-open := BM_browser_open
 alias account := BM_account
 alias works := BM_works
 alias probe := BM_probe
+alias agent := BM_agent
+alias results := BM_results
 
 # Prepare the local CLI and ensure the dedicated browser is open. No model starts.
 BM_prepare:
@@ -27,3 +29,9 @@ BM_works BM_limit="3":
 
 BM_probe BM_tool="account":
     @./BM_douyin goose probe {{quote(BM_tool)}}
+
+BM_agent BM_task:
+    @./BM_douyin agent run {{quote(BM_task)}}
+
+BM_results BM_kind="works":
+    @./BM_douyin results {{quote(BM_kind)}}

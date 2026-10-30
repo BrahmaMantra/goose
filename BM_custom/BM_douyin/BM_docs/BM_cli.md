@@ -30,6 +30,8 @@ just prepare
 
 ## 命令
 
+自然语言任务使用 `./BM_douyin agent run "任务"` 或 `just agent "任务"`，需要私有 DeepSeek 配置并调用远端 API；`./BM_douyin results works`（或 `just results works`）只查看最近的本地记录。执行边界和日志说明见 [BM_agent.md](BM_agent.md)。
+
 | 命令 | 行为 |
 | --- | --- |
 | `just prepare` | 创建本地入口、检查配置与依赖，复用已有会话或打开专用 Chrome |

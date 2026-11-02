@@ -77,7 +77,7 @@ build_goose_desk_debug: build_goose_cli_debug
     cd ui/desktop
     pnpm install
 
-[doc('启动 Electron 桌面开发版；需先运行 build_goose_desk_debug；界面内发起对话才会调用模型')]
+[doc('启动 Electron 桌面开发版；需先运行 build_goose_desk_debug；自动复用 BM 私有 Goose 家（含模型配置与历史会话）；界面内发起对话才会调用模型')]
 start_goose_desk_debug:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -86,6 +86,12 @@ start_goose_desk_debug:
       echo '缺少桌面端构建产物，请先运行: just build_goose_desk_debug' >&2
       exit 1
     fi
+    # 复用 BM 隔离家（配置、密钥、会话）；可用 GOOSE_PATH_ROOT 覆盖；不存在则回退默认家
+    BM_state_dir="{{repo_dir}}/../.local/BM_douyin/BM_private/BM_goose_state"
+    if [[ -z "${GOOSE_PATH_ROOT:-}" && -d "$BM_state_dir" ]]; then
+      export GOOSE_PATH_ROOT="$BM_state_dir"
+    fi
+    echo "GOOSE_PATH_ROOT=${GOOSE_PATH_ROOT:-<goose 默认家>}"
     source bin/activate-hermit
     cd ui/desktop
     pnpm run start-gui

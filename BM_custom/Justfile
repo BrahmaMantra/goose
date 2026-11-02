@@ -62,7 +62,8 @@ build_goose_cli_debug:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{repo_dir}}"
-    source bin/activate-hermit
+    # Hermit 按父进程/$SHELL 选择激活脚本方言；recipe 跑 bash，但登录 shell 可能是 zsh，需显式指定
+    SHELL=/bin/bash source bin/activate-hermit
     cargo build -p goose-cli --bin goose --no-default-features --features "{{goose_cli_features}}"
     target/debug/goose --version
 
@@ -73,7 +74,7 @@ build_goose_desk_debug: build_goose_cli_debug
     cd "{{repo_dir}}"
     mkdir -p ui/desktop/src/bin
     install -m 0755 target/debug/goose ui/desktop/src/bin/goose
-    source bin/activate-hermit
+    SHELL=/bin/bash source bin/activate-hermit
     cd ui/desktop
     pnpm install
 
@@ -92,6 +93,6 @@ start_goose_desk_debug:
       export GOOSE_PATH_ROOT="$BM_state_dir"
     fi
     echo "GOOSE_PATH_ROOT=${GOOSE_PATH_ROOT:-<goose 默认家>}"
-    source bin/activate-hermit
+    SHELL=/bin/bash source bin/activate-hermit
     cd ui/desktop
     pnpm run start-gui

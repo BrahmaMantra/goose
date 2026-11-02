@@ -2,68 +2,96 @@
 default:
     @just --list
 
-alias prepare := BM_prepare
-alias doctor := BM_doctor
-alias browser-open := BM_browser_open
-alias browser-close := BM_browser_close
-alias account := BM_account
-alias works := BM_works
-alias probe := BM_probe
-alias agent := BM_agent
-alias results := BM_results
-alias configure := BM_configure
-alias validate := BM_validate
-alias test := BM_test
-alias test-native := BM_test_native
+repo_dir := parent_directory(justfile_directory())
+goose_cli_features := "code-mode,rustls-tls,tree-sitter,live-voice,aws-providers,telemetry,otel,bundled-mcp,scheduler,platform-apps,chat-recall,acp-http,online-model-meta"
 
 [doc('准备本地 CLI，并打开或复用专用浏览器；不调用模型')]
-BM_prepare:
-    @just --justfile BM_douyin/Justfile BM_prepare
+prepare:
+    @just --justfile BM_douyin/Justfile prepare
 
 [doc('检查本地配置和工具依赖；不读取账号、不调用模型')]
-BM_doctor:
-    @just --justfile BM_douyin/Justfile BM_doctor
+doctor:
+    @just --justfile BM_douyin/Justfile doctor
 
 [doc('打开抖音专用浏览器，复用独立登录资料；需要时在官方页面扫码')]
-BM_browser_open:
-    @just --justfile BM_douyin/Justfile BM_browser_open
+browser-open:
+    @just --justfile BM_douyin/Justfile browser-open
 
 [doc('关闭抖音专用浏览器；保留本地登录资料，不退出抖音账号')]
-BM_browser_close:
-    @just --justfile BM_douyin/Justfile BM_browser_close
+browser-close:
+    @just --justfile BM_douyin/Justfile browser-close
 
 [doc('读取页面上的账号状态；真实值存本地，终端仅显示脱敏摘要；不调用模型')]
-BM_account:
-    @just --justfile BM_douyin/Justfile BM_account
+account:
+    @just --justfile BM_douyin/Justfile account
 
 [doc('读取当前已加载的少量作品，数量1～10；真实值存本地；不调用模型')]
-BM_works BM_limit="3":
-    @just --justfile BM_douyin/Justfile BM_works {{quote(BM_limit)}}
+works limit="3":
+    @just --justfile BM_douyin/Justfile works {{quote(limit)}}
 
 [doc('通过 Goose 验证 Plugin MCP；参数 account/works，作品最多3条；不调用模型')]
-BM_probe BM_tool="account":
-    @just --justfile BM_douyin/Justfile BM_probe {{quote(BM_tool)}}
+probe tool="account":
+    @just --justfile BM_douyin/Justfile probe {{quote(tool)}}
 
 [doc('将带引号的任务交给 Goose + LLM；只读工具，作品最多3条；按模型服务计费')]
-BM_agent BM_task:
-    @just --justfile BM_douyin/Justfile BM_agent {{quote(BM_task)}}
+agent task:
+    @just --justfile BM_douyin/Justfile agent {{quote(task)}}
 
 [doc('查看最近本地结果；参数 works/account/agent；会显示个人数据，不抓取、不调用模型')]
-BM_results BM_kind="works":
-    @just --justfile BM_douyin/Justfile BM_results {{quote(BM_kind)}}
+results kind="works":
+    @just --justfile BM_douyin/Justfile results {{quote(kind)}}
 
 [doc('进入 Goose 原生模型配置；不执行任务，可能查询模型服务元数据')]
-BM_configure:
-    @just --justfile BM_douyin/Justfile BM_configure
+configure:
+    @just --justfile BM_douyin/Justfile configure
 
 [doc('使用 Goose 校验独立 Recipe；不读取账号、不调用模型')]
-BM_validate:
-    @just --justfile BM_douyin/Justfile BM_validate
+validate:
+    @just --justfile BM_douyin/Justfile validate
 
 [doc('运行合成回归；不读取账号与模型配置、不启动浏览器、不调用模型')]
-BM_test:
-    @just --justfile BM_douyin/Justfile BM_test
+test:
+    @just --justfile BM_douyin/Justfile test
 
 [doc('用真实 Goose、回环模拟响应与合成 MCP 验证 Plugin；不调用模型或抖音')]
-BM_test_native:
-    @just --justfile BM_douyin/Justfile BM_test_native
+test-native:
+    @just --justfile BM_douyin/Justfile test-native
+
+[doc('用源码编译 debug Goose CLI；关闭进程内本地推理，外部 Ollama/OpenAI 兼容模型不受影响；不调用模型')]
+build_goose_cli_debug:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{repo_dir}}"
+    source bin/activate-hermit
+    cargo build -p goose-cli --bin goose --no-default-features --features "{{goose_cli_features}}"
+    target/debug/goose --version
+
+[doc('准备桌面端 debug 构建产物：编译 CLI、复制二进制并安装 pnpm 依赖；不启动界面、不调用模型')]
+build_goose_desk_debug: build_goose_cli_debug
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{repo_dir}}"
+    mkdir -p ui/desktop/src/bin
+    install -m 0755 target/debug/goose ui/desktop/src/bin/goose
+    source bin/activate-hermit
+    cd ui/desktop
+    pnpm install
+
+[doc('启动 Electron 桌面开发版；需先运行 build_goose_desk_debug；自动复用 BM 私有 Goose 家（含模型配置与历史会话）；界面内发起对话才会调用模型')]
+start_goose_desk_debug:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{repo_dir}}"
+    if [[ ! -x ui/desktop/src/bin/goose ]]; then
+      echo '缺少桌面端构建产物，请先运行: just build_goose_desk_debug' >&2
+      exit 1
+    fi
+    # 复用 BM 隔离家（配置、密钥、会话）；可用 GOOSE_PATH_ROOT 覆盖；不存在则回退默认家
+    BM_state_dir="{{repo_dir}}/../.local/BM_douyin/BM_private/BM_goose_state"
+    if [[ -z "${GOOSE_PATH_ROOT:-}" && -d "$BM_state_dir" ]]; then
+      export GOOSE_PATH_ROOT="$BM_state_dir"
+    fi
+    echo "GOOSE_PATH_ROOT=${GOOSE_PATH_ROOT:-<goose 默认家>}"
+    source bin/activate-hermit
+    cd ui/desktop
+    pnpm run start-gui

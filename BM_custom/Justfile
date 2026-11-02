@@ -15,6 +15,11 @@ alias configure := BM_configure
 alias validate := BM_validate
 alias test := BM_test
 alias test-native := BM_test_native
+alias build_goose_cli_debug := BM_build_goose_cli_debug
+alias build_goose_desk_debug := BM_build_goose_desk_debug
+
+BM_REPO := parent_directory(justfile_directory())
+BM_GOOSE_CLI_FEATURES := "code-mode,rustls-tls,tree-sitter,live-voice,aws-providers,telemetry,otel,bundled-mcp,scheduler,platform-apps,chat-recall,acp-http,online-model-meta"
 
 [doc('准备本地 CLI，并打开或复用专用浏览器；不调用模型')]
 BM_prepare:
@@ -67,3 +72,24 @@ BM_test:
 [doc('用真实 Goose、回环模拟响应与合成 MCP 验证 Plugin；不调用模型或抖音')]
 BM_test_native:
     @just --justfile BM_douyin/Justfile BM_test_native
+
+[doc('用源码编译 debug Goose CLI；关闭进程内本地推理，外部 Ollama/OpenAI 兼容模型不受影响；不调用模型')]
+BM_build_goose_cli_debug:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{BM_REPO}}"
+    source bin/activate-hermit
+    cargo build -p goose-cli --bin goose --no-default-features --features "{{BM_GOOSE_CLI_FEATURES}}"
+    target/debug/goose --version
+
+[doc('编译 debug Goose CLI 并启动 Electron 桌面开发版；首次会安装 pnpm 依赖；不调用模型')]
+BM_build_goose_desk_debug: BM_build_goose_cli_debug
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{BM_REPO}}"
+    mkdir -p ui/desktop/src/bin
+    install -m 0755 target/debug/goose ui/desktop/src/bin/goose
+    source bin/activate-hermit
+    cd ui/desktop
+    pnpm install
+    pnpm run start-gui

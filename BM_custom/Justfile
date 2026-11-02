@@ -66,7 +66,7 @@ build_goose_cli_debug:
     cargo build -p goose-cli --bin goose --no-default-features --features "{{goose_cli_features}}"
     target/debug/goose --version
 
-[doc('编译 debug Goose CLI 并启动 Electron 桌面开发版；首次会安装 pnpm 依赖；不调用模型')]
+[doc('准备桌面端 debug 构建产物：编译 CLI、复制二进制并安装 pnpm 依赖；不启动界面、不调用模型')]
 build_goose_desk_debug: build_goose_cli_debug
     #!/usr/bin/env bash
     set -euo pipefail
@@ -76,4 +76,16 @@ build_goose_desk_debug: build_goose_cli_debug
     source bin/activate-hermit
     cd ui/desktop
     pnpm install
+
+[doc('启动 Electron 桌面开发版；需先运行 build_goose_desk_debug；界面内发起对话才会调用模型')]
+start_goose_desk_debug:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{repo_dir}}"
+    if [[ ! -x ui/desktop/src/bin/goose ]]; then
+      echo '缺少桌面端构建产物，请先运行: just build_goose_desk_debug' >&2
+      exit 1
+    fi
+    source bin/activate-hermit
+    cd ui/desktop
     pnpm run start-gui

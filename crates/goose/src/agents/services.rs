@@ -247,6 +247,9 @@ impl fmt::Display for GoosePlatform {
 
 #[derive(Clone)]
 pub struct StateMachineServicesConfig {
+    /// Disable filesystem Skill discovery and loading for a restricted runtime.
+    #[allow(non_snake_case)]
+    pub BM_disable_skills: bool,
     pub session_manager: Arc<SessionManager>,
     pub permission_manager: Arc<PermissionManager>,
     pub scheduler_service: Option<Arc<dyn SchedulerTrait>>,
@@ -286,6 +289,7 @@ impl StateMachineServicesConfig {
     ) -> Self {
         Self {
             session_manager,
+            BM_disable_skills: false,
             permission_manager,
             scheduler_service,
             disable_session_naming,
@@ -305,6 +309,8 @@ impl StateMachineServicesConfig {
 const DEFAULT_MAX_SESSIONS: usize = 100;
 
 pub struct StateMachineServices {
+    #[allow(non_snake_case)]
+    BM_disable_skills: bool,
     pub session_manager: Arc<SessionManager>,
     pub permission_manager: Arc<PermissionManager>,
     pub providers: Arc<ProviderManager>,
@@ -344,6 +350,7 @@ impl StateMachineServices {
         default_client.capabilities.elicitation_handler = config.elicitation_handler;
         default_client.capabilities.protocol_version = config.mcp_protocol_version;
         let services = Arc::new(Self {
+            BM_disable_skills: config.BM_disable_skills,
             extension_manager: Arc::new(ExtensionManager::new(
                 config.providers.clone(),
                 config.session_manager.clone(),
@@ -745,6 +752,7 @@ impl StateMachineServices {
         });
 
         build_state_machine(StateMachineConfig {
+            BM_disable_skills: self.BM_disable_skills,
             provider,
             model_config,
             context_limit,

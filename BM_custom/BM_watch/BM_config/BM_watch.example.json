@@ -1,0 +1,16 @@
+{
+  "BM_data_dir": "/path/to/private/BM_watch_data",
+  "BM_goose_root": "/path/to/private/BM_goose_state",
+  "BM_admin_token": "replace-with-a-random-private-token",
+  "BM_webhook_secret": "",
+  "BM_client_key": "",
+  "BM_interval_seconds": 30,
+  "BM_batch_size": 10,
+  "BM_port": 8791,
+  "BM_rules": {
+    "BM_account": "BM_example_owner",
+    "BM_works": ["BM_example_work"],
+    "BM_allow_contains": [],
+    "BM_max_reply_chars": 200
+  }
+}

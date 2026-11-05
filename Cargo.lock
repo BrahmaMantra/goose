@@ -1391,6 +1391,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm-douyin-api"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha1 0.10.7",
+ "subtle",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
+name = "bm-watch"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "bm-douyin-api",
+ "futures",
+ "goose",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "subtle",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "boa_ast"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

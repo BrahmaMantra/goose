@@ -3,6 +3,30 @@ default:
     @just --list
 
 repo_dir := parent_directory(justfile_directory())
+
+[doc('编译 Rust 评论后台；不启动模型、不访问抖音')]
+watch-build:
+    cd "{{repo_dir}}" && bin/cargo build -p bm-watch --bin BM_watch
+
+[doc('验证 Rust API、队列及真实 Goose 加回环模拟模型；不访问真实账号或外部模型')]
+watch-test:
+    cd "{{repo_dir}}" && bin/cargo test -p bm-douyin-api -p bm-watch --tests
+
+[doc('前台启动单进程评论后台；需私有配置；启用消费后匹配规则的消息会调用配置的 LLM，真实平台发送仍禁用')]
+watch-start config:
+    "{{repo_dir}}/target/debug/BM_watch" --config {{quote(config)}}
+
+[doc('读取评论后台状态与队列计数；不输出评论或配置')]
+watch-status config:
+    python3 BM_watch/BM_scripts/BM_control.py status {{quote(config)}}
+
+[doc('启用队列消费；匹配规则的消息将通过 Goose 调用配置的 LLM')]
+watch-resume config:
+    python3 BM_watch/BM_scripts/BM_control.py resume {{quote(config)}}
+
+[doc('暂停评论消费与新的提交；保留后台进程和私有队列')]
+watch-stop config:
+    python3 BM_watch/BM_scripts/BM_control.py pause {{quote(config)}}
 goose_cli_features := "code-mode,rustls-tls,tree-sitter,live-voice,aws-providers,telemetry,otel,bundled-mcp,scheduler,platform-apps,chat-recall,acp-http,online-model-meta"
 
 [doc('准备本地 CLI，并打开或复用专用浏览器；不调用模型')]

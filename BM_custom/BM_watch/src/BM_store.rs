@@ -1,0 +1,170 @@
+use anyhow::{ensure, Result};
+use serde::{Deserialize, Serialize};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+    Row, SqlitePool,
+};
+use std::{os::unix::fs::OpenOptionsExt, path::Path};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BM_Comment {
+    pub BM_account: String,
+    pub BM_work: String,
+    pub BM_comment: String,
+    pub BM_author: String,
+    pub BM_text: String,
+}
+
+#[derive(Clone)]
+pub struct BM_Store {
+    BM_pool: SqlitePool,
+}
+
+impl BM_Store {
+    pub async fn BM_open(BM_path: &Path) -> Result<Self> {
+        let BM_file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(BM_path)?;
+        use std::os::unix::fs::PermissionsExt;
+        ensure!(
+            BM_file.metadata()?.permissions().mode() & 0o077 == 0,
+            "queue file must be private"
+        );
+        let BM_pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(BM_path)
+                    .create_if_missing(true)
+                    .journal_mode(SqliteJournalMode::Wal),
+            )
+            .await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS BM_inbox (BM_id INTEGER PRIMARY KEY, BM_account TEXT NOT NULL, BM_work TEXT NOT NULL, BM_comment TEXT NOT NULL, BM_payload TEXT NOT NULL, BM_status TEXT NOT NULL DEFAULT 'queued', BM_reply TEXT, UNIQUE(BM_account,BM_work,BM_comment))").execute(&BM_pool).await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS BM_webhooks (BM_id TEXT PRIMARY KEY, BM_payload TEXT NOT NULL)").execute(&BM_pool).await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS BM_control (BM_id INTEGER PRIMARY KEY CHECK(BM_id=1), BM_enabled INTEGER NOT NULL DEFAULT 0, BM_generation INTEGER NOT NULL DEFAULT 0)").execute(&BM_pool).await?;
+        sqlx::query("INSERT OR IGNORE INTO BM_control(BM_id,BM_enabled) VALUES(1,0)")
+            .execute(&BM_pool)
+            .await?;
+        sqlx::query("UPDATE BM_inbox SET BM_status=CASE WHEN BM_status='sending' THEN 'unknown' ELSE 'queued' END WHERE BM_status IN ('processing','sending')").execute(&BM_pool).await?;
+        Ok(Self { BM_pool })
+    }
+
+    pub async fn BM_enqueue(&self, BM_message: &BM_Comment) -> Result<bool> {
+        ensure!(
+            [
+                &BM_message.BM_account,
+                &BM_message.BM_work,
+                &BM_message.BM_comment,
+                &BM_message.BM_author
+            ]
+            .iter()
+            .all(|BM_x| !BM_x.is_empty() && BM_x.len() <= 512),
+            "invalid comment reference"
+        );
+        ensure!(
+            !BM_message.BM_text.is_empty() && BM_message.BM_text.len() <= 16_000,
+            "invalid comment length"
+        );
+        let BM_result = sqlx::query("INSERT OR IGNORE INTO BM_inbox(BM_account,BM_work,BM_comment,BM_payload) VALUES(?,?,?,?)")
+            .bind(&BM_message.BM_account).bind(&BM_message.BM_work).bind(&BM_message.BM_comment)
+            .bind(serde_json::to_string(BM_message)?).execute(&self.BM_pool).await?;
+        Ok(BM_result.rows_affected() == 1)
+    }
+
+    pub async fn BM_enabled(&self) -> Result<bool> {
+        Ok(
+            sqlx::query_scalar::<_, i64>("SELECT BM_enabled FROM BM_control WHERE BM_id=1")
+                .fetch_one(&self.BM_pool)
+                .await?
+                != 0,
+        )
+    }
+
+    pub async fn BM_set_enabled(&self, BM_enabled: bool) -> Result<()> {
+        sqlx::query(
+            "UPDATE BM_control SET BM_enabled=?,BM_generation=BM_generation+1 WHERE BM_id=1",
+        )
+        .bind(BM_enabled)
+        .execute(&self.BM_pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn BM_generation(&self) -> Result<i64> {
+        Ok(
+            sqlx::query_scalar("SELECT BM_generation FROM BM_control WHERE BM_id=1")
+                .fetch_one(&self.BM_pool)
+                .await?,
+        )
+    }
+
+    pub async fn BM_record_webhook(
+        &self,
+        BM_id: &str,
+        BM_payload: &serde_json::Value,
+    ) -> Result<bool> {
+        ensure!(
+            !BM_id.is_empty() && BM_id.len() <= 512,
+            "invalid event reference"
+        );
+        let BM_result =
+            sqlx::query("INSERT OR IGNORE INTO BM_webhooks(BM_id,BM_payload) VALUES(?,?)")
+                .bind(BM_id)
+                .bind(serde_json::to_string(BM_payload)?)
+                .execute(&self.BM_pool)
+                .await?;
+        Ok(BM_result.rows_affected() == 1)
+    }
+
+    pub async fn BM_claim(&self) -> Result<Option<(i64, BM_Comment)>> {
+        let BM_row = sqlx::query("UPDATE BM_inbox SET BM_status='processing' WHERE BM_id=(SELECT BM_id FROM BM_inbox WHERE BM_status='queued' ORDER BY BM_id LIMIT 1) RETURNING BM_id,BM_payload")
+            .fetch_optional(&self.BM_pool).await?;
+        BM_row
+            .map(|BM_row| {
+                Ok((
+                    BM_row.get("BM_id"),
+                    serde_json::from_str(BM_row.get::<&str, _>("BM_payload"))?,
+                ))
+            })
+            .transpose()
+    }
+
+    pub async fn BM_finish(
+        &self,
+        BM_id: i64,
+        BM_status: &str,
+        BM_reply: Option<&str>,
+    ) -> Result<()> {
+        ensure!(
+            ["queued", "review", "skipped", "failed", "sending", "accepted", "unknown"]
+                .contains(&BM_status),
+            "invalid queue state"
+        );
+        sqlx::query("UPDATE BM_inbox SET BM_status=?,BM_reply=COALESCE(?,BM_reply) WHERE BM_id=?")
+            .bind(BM_status)
+            .bind(BM_reply)
+            .bind(BM_id)
+            .execute(&self.BM_pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn BM_counts(&self) -> Result<serde_json::Value> {
+        let BM_rows =
+            sqlx::query("SELECT BM_status,COUNT(*) AS BM_count FROM BM_inbox GROUP BY BM_status")
+                .fetch_all(&self.BM_pool)
+                .await?;
+        let mut BM_counts = serde_json::Map::new();
+        for BM_row in BM_rows {
+            BM_counts.insert(
+                BM_row.get::<String, _>("BM_status"),
+                serde_json::json!(BM_row.get::<i64, _>("BM_count")),
+            );
+        }
+        Ok(serde_json::Value::Object(BM_counts))
+    }
+}

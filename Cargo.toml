@@ -1,6 +1,8 @@
 [workspace]
 members = [
     "crates/*",
+    "BM_custom/BM_douyin_api",
+    "BM_custom/BM_watch",
 ]
 resolver = "2"
 

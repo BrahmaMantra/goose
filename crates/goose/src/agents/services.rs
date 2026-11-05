@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
@@ -11,7 +11,7 @@ use tracing_futures::Instrument;
 use super::gen_ai_telemetry;
 use super::tool_confirmation_coordinator::{ActiveTurnGuard, ConfirmationAnswer};
 use crate::action_required_manager::ElicitationOutcome;
-use crate::agents::extension_manager::{ClientContext, ExtensionManager};
+use crate::agents::extension_manager::{ClientContext, ExtensionLease, ExtensionManager};
 use crate::agents::provider_manager::ProviderManager;
 use crate::agents::session_runtime::{Attachment, SessionRuntime};
 use crate::agents::state_machine::ops_recipe;
@@ -39,6 +39,7 @@ use crate::security::security_inspector::SecurityInspector;
 use crate::session::{Session, SessionManager};
 use crate::tool_inspection::ToolInspectionManager;
 use crate::tool_monitor::RepetitionInspector;
+use goose_agent::stop_hook::DEFAULT_DENY_LIMIT;
 use goose_providers::api_client::{ApiClient, AuthMethod};
 use goose_providers::errors::ProviderError;
 use goose_providers::thinking::{ThinkingEffort, ThinkingEffortSupport};
@@ -49,7 +50,6 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, warn};
 
-const DEFAULT_STOP_HOOK_BLOCK_CAP: u32 = 8;
 const AUTO_EFFORTS: [ThinkingEffort; 5] = [
     ThinkingEffort::Off,
     ThinkingEffort::Low,
@@ -123,6 +123,7 @@ pub struct TurnSettings {
     /// `None` derives it from the context limit.
     pub tool_call_cutoff: Option<usize>,
     pub auto_effort: Option<Arc<dyn Operation<Session, GooseEffect>>>,
+    pub context_relevance: Option<Arc<dyn goose_providers::decision::DecisionProvider>>,
 }
 
 impl TurnSettings {
@@ -145,7 +146,7 @@ impl TurnSettings {
             ),
             stop_hook_block_cap: config
                 .get_param::<u32>("GOOSE_STOP_HOOK_BLOCK_CAP")
-                .unwrap_or(DEFAULT_STOP_HOOK_BLOCK_CAP),
+                .unwrap_or(DEFAULT_DENY_LIMIT),
             tool_pair_summarization: crate::context_mgmt::tool_pair_summarization_enabled(),
             compaction_threshold: config
                 .get_param::<f64>("GOOSE_AUTO_COMPACT_THRESHOLD")
@@ -155,6 +156,9 @@ impl TurnSettings {
                 .unwrap_or(crate::context_mgmt::DEFAULT_AUTO_COMPACT_TOKEN_LIMIT),
             tool_call_cutoff: config.get_param::<usize>("GOOSE_TOOL_CALL_CUTOFF").ok(),
             auto_effort: auto_effort_from_config(provider, model_config),
+            context_relevance: crate::agents::state_machine_builder::context_relevance_provider(
+                config, provider,
+            ),
         }
     }
 }
@@ -725,16 +729,39 @@ impl StateMachineServices {
         cancel: CancellationToken,
         steer_queue: SteerQueue,
     ) -> StateMachine<'_, Session, GooseEffect> {
-        let settings = match &self.turn_settings {
-            Some(settings) => settings.clone(),
-            None => TurnSettings::from_config(provider.as_ref(), &model_config),
-        };
-        let max_turns = session_config.max_turns.unwrap_or(settings.max_turns);
         let extension_lease = self
             .runtime
             .confirmations
             .session(&session_config.id)
             .extension_lease();
+        self.create_state_machine_with_lease(
+            provider,
+            model_config,
+            context_limit,
+            session_config,
+            cancel,
+            steer_queue,
+            extension_lease,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn create_state_machine_with_lease(
+        self: &Arc<Self>,
+        provider: Arc<dyn Provider>,
+        model_config: goose_providers::model::ModelConfig,
+        context_limit: usize,
+        session_config: SessionConfig,
+        cancel: CancellationToken,
+        steer_queue: SteerQueue,
+        extension_lease: Arc<StdMutex<Option<Arc<ExtensionLease>>>>,
+    ) -> StateMachine<'_, Session, GooseEffect> {
+        let settings = match &self.turn_settings {
+            Some(settings) => settings.clone(),
+            None => TurnSettings::from_config(provider.as_ref(), &model_config),
+        };
+        let max_turns = session_config.max_turns.unwrap_or(settings.max_turns);
         let compaction_threshold = crate::context_mgmt::capped_compaction_threshold(
             settings.compaction_threshold,
             settings.compaction_token_limit,
@@ -764,6 +791,7 @@ impl StateMachineServices {
             max_turns,
             extra_operations: settings.auto_effort.into_iter().collect(),
             cancel,
+            context_relevance: settings.context_relevance,
         })
     }
 

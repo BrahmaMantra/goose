@@ -12,6 +12,7 @@ mod agent_reply;
 mod calculator_extension;
 mod cancellation;
 mod compaction_lifecycle;
+mod context_relevance;
 mod dummy_api;
 mod hooks_lifecycle;
 mod pipeline;
@@ -514,6 +515,7 @@ async fn slash_commands_yield_or_fall_through_to_inference() -> Result<()> {
 
     let status = pipeline.run(["/status"]).await?;
     assert_eq!(api.call_count(), 0);
+    status.assert_message(-1, Agent, &format!("Session ID: `{}`", pipeline.session_id));
     status.assert_message(-1, Agent, "Provider:");
     assert!(status
         .conversation()

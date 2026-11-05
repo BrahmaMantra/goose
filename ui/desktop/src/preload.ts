@@ -1,6 +1,7 @@
 import Electron, { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { Recipe } from './recipe';
 import type { GooseApp } from './types/apps';
+import type { BM_Record, BM_Snapshot, BM_WatchAction } from './BM_watch/BM_types';
 import type { Settings, SettingKey } from './utils/settings';
 import { defaultSettings } from './utils/settings';
 import type { OpenExternalUrlResult } from './utils/urlSecurity';
@@ -98,6 +99,11 @@ export interface CreateChatWindowOptions {
 
 // Define the API types in a single place
 type ElectronAPI = {
+  BM_watchSelectConfig: () => Promise<BM_Snapshot | null>;
+  BM_watchSnapshot: () => Promise<BM_Snapshot>;
+  BM_watchAction: (BM_action: BM_WatchAction) => Promise<BM_Snapshot>;
+  BM_watchRecords: (BM_before?: number) => Promise<BM_Record[]>;
+  BM_watchSkip: (BM_id: number) => Promise<void>;
   platform: string;
   arch: string;
   reactReady: () => void;
@@ -191,6 +197,11 @@ type AppConfigAPI = {
 };
 
 const electronAPI: ElectronAPI = {
+  BM_watchSelectConfig: () => ipcRenderer.invoke('BM-watch:select'),
+  BM_watchSnapshot: () => ipcRenderer.invoke('BM-watch:snapshot'),
+  BM_watchAction: (BM_action) => ipcRenderer.invoke('BM-watch:action', BM_action),
+  BM_watchRecords: (BM_before) => ipcRenderer.invoke('BM-watch:records', BM_before),
+  BM_watchSkip: (BM_id) => ipcRenderer.invoke('BM-watch:skip', BM_id),
   platform: process.platform,
   arch: process.arch,
   reactReady: () => ipcRenderer.send('react-ready'),

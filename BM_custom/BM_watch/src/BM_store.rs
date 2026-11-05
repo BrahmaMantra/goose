@@ -21,7 +21,38 @@ pub struct BM_Store {
     BM_pool: SqlitePool,
 }
 
+#[derive(Serialize)]
+pub struct BM_Record {
+    pub BM_id: i64,
+    pub BM_status: String,
+    pub BM_message: BM_Comment,
+    pub BM_reply: Option<String>,
+}
+
 impl BM_Store {
+    pub async fn BM_records(&self, BM_before: Option<i64>) -> Result<Vec<BM_Record>> {
+        ensure!(BM_before.is_none_or(|BM_id| BM_id > 0), "invalid cursor");
+        let BM_rows = sqlx::query("SELECT BM_id,BM_status,BM_payload,BM_reply FROM BM_inbox WHERE (? IS NULL OR BM_id < ?) ORDER BY BM_id DESC LIMIT 50")
+            .bind(BM_before).bind(BM_before).fetch_all(&self.BM_pool).await?;
+        BM_rows
+            .into_iter()
+            .map(|BM_row| {
+                Ok(BM_Record {
+                    BM_id: BM_row.get("BM_id"),
+                    BM_status: BM_row.get("BM_status"),
+                    BM_message: serde_json::from_str(BM_row.get::<&str, _>("BM_payload"))?,
+                    BM_reply: BM_row.get("BM_reply"),
+                })
+            })
+            .collect()
+    }
+
+    pub async fn BM_skip(&self, BM_id: i64) -> Result<bool> {
+        ensure!(BM_id > 0, "invalid record reference");
+        let BM_result = sqlx::query("UPDATE BM_inbox SET BM_status='skipped' WHERE BM_id=? AND BM_status IN ('review','failed')")
+            .bind(BM_id).execute(&self.BM_pool).await?;
+        Ok(BM_result.rows_affected() == 1)
+    }
     pub async fn BM_open(BM_path: &Path) -> Result<Self> {
         let BM_file = std::fs::OpenOptions::new()
             .write(true)

@@ -115,6 +115,76 @@ async fn BM_process_auth_batches_and_restart() {
         .unwrap()
         .status()
         .is_success());
+    assert_eq!(
+        BM_http
+            .get(format!("{BM_base}/BM/records"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    let BM_task: Value = BM_http
+        .get(format!("{BM_base}/BM/task"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_task["BM_rules"]["BM_works"], json!(["BM_work"]));
+    assert!(!BM_task.to_string().contains(BM_token));
+    let BM_records: Value = BM_http
+        .get(format!("{BM_base}/BM/records"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_records["BM_records"].as_array().unwrap().len(), 2);
+    let BM_id = BM_records["BM_records"][0]["BM_id"].as_i64().unwrap();
+    let BM_older: Value = BM_http
+        .get(format!("{BM_base}/BM/records?BM_before={BM_id}"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_older["BM_records"].as_array().unwrap().len(), 1);
+    assert!(BM_http
+        .post(format!("{BM_base}/BM/skip"))
+        .bearer_auth(BM_token)
+        .json(&json!({"BM_id":BM_id}))
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .is_success());
+    assert_eq!(
+        BM_http
+            .post(format!("{BM_base}/BM/skip"))
+            .bearer_auth(BM_token)
+            .json(&json!({"BM_id":BM_id}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    assert_eq!(
+        BM_http
+            .post(format!("{BM_base}/BM/shutdown"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
     let BM_second = Command::new(env!("CARGO_BIN_EXE_BM_watch"))
         .arg("--config")
         .arg(&BM_path)
@@ -123,12 +193,14 @@ async fn BM_process_auth_batches_and_restart() {
         .status()
         .unwrap();
     assert!(!BM_second.success());
-    assert!(Command::new("kill")
-        .arg("-TERM")
-        .arg(BM_pid.to_string())
-        .status()
+    assert!(BM_http
+        .post(format!("{BM_base}/BM/shutdown"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
         .unwrap()
-        .success());
+        .status()
+        .is_success());
     assert!(BM_child.0.wait().unwrap().success());
     drop(BM_child);
     let _BM_restarted = BM_start(&BM_path);
@@ -148,5 +220,6 @@ async fn BM_process_auth_batches_and_restart() {
         .await
         .unwrap();
     assert_eq!(BM_status["BM_enabled"], false);
-    assert_eq!(BM_status["BM_counts"]["review"], 2);
+    assert_eq!(BM_status["BM_counts"]["review"], 1);
+    assert_eq!(BM_status["BM_counts"]["skipped"], 1);
 }

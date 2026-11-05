@@ -31,6 +31,7 @@ import { connectRemoteBackend } from './remoteBackends';
 import { installBackendCertificateVerifiers } from './backendCertificateVerifier';
 import { configureProxy } from './proxy';
 import { startGooseServe } from './gooseServe';
+import { BM_registerWatchIpc } from './BM_watch/BM_ipc';
 import { getLoginShellPath } from './loginShellPath';
 import { GooseServeLeaseRegistry, type GooseServeLease } from './gooseServeLeaseRegistry';
 import { normalizeAcpHttpBaseUrl } from './acp/url';
@@ -3075,6 +3076,7 @@ async function appMain() {
 
 app.whenReady().then(async () => {
   try {
+    BM_registerWatchIpc(requireRegularRendererWindow);
     await appMain();
   } catch (error) {
     dialog.showErrorBox('Goose Error', `Failed to create main window: ${error}`);

@@ -7,6 +7,9 @@ repo_dir := parent_directory(justfile_directory())
 [doc('编译 Rust 评论后台；不启动模型、不访问抖音')]
 watch-build:
     cd "{{repo_dir}}" && bin/cargo build -p bm-watch --bin BM_watch
+    mkdir -p "{{repo_dir}}/ui/desktop/src/bin"
+    install -m 0755 "{{repo_dir}}/target/debug/BM_watch" "{{repo_dir}}/ui/desktop/src/bin/BM_watch.BM_new"
+    mv -f "{{repo_dir}}/ui/desktop/src/bin/BM_watch.BM_new" "{{repo_dir}}/ui/desktop/src/bin/BM_watch"
 
 [doc('验证 Rust API、队列及真实 Goose 加回环模拟模型；不访问真实账号或外部模型')]
 watch-test:
@@ -86,18 +89,19 @@ build_goose_cli_debug:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{repo_dir}}"
-    source bin/activate-hermit
+    SHELL=/bin/bash source bin/activate-hermit
     cargo build -p goose-cli --bin goose --no-default-features --features "{{goose_cli_features}}"
     target/debug/goose --version
 
 [doc('准备桌面端 debug 构建产物：编译 CLI、复制二进制并安装 pnpm 依赖；不启动界面、不调用模型')]
-build_goose_desk_debug: build_goose_cli_debug
+build_goose_desk_debug: build_goose_cli_debug watch-build
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{repo_dir}}"
     mkdir -p ui/desktop/src/bin
-    install -m 0755 target/debug/goose ui/desktop/src/bin/goose
-    source bin/activate-hermit
+    install -m 0755 target/debug/goose ui/desktop/src/bin/goose.BM_new
+    mv -f ui/desktop/src/bin/goose.BM_new ui/desktop/src/bin/goose
+    SHELL=/bin/bash source bin/activate-hermit
     cd ui/desktop
     pnpm install
 
@@ -116,6 +120,6 @@ start_goose_desk_debug:
       export GOOSE_PATH_ROOT="$BM_state_dir"
     fi
     echo "GOOSE_PATH_ROOT=${GOOSE_PATH_ROOT:-<goose 默认家>}"
-    source bin/activate-hermit
+    SHELL=/bin/bash source bin/activate-hermit
     cd ui/desktop
     pnpm run start-gui

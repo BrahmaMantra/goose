@@ -130,13 +130,15 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf) -> Result<()> {
         BM_platform: Arc::new(BM_NoWrites),
         BM_gate: tokio::sync::Mutex::new(()),
     });
+    let BM_cancel = CancellationToken::new();
     let BM_service = Arc::new(BM_Service {
+        BM_interval_seconds: BM_config.BM_interval_seconds,
+        BM_cancel: BM_cancel.clone(),
         BM_worker: BM_worker.clone(),
         BM_admin_token: BM_config.BM_admin_token,
         BM_webhook_secret: BM_config.BM_webhook_secret,
         BM_client_key: BM_config.BM_client_key,
     });
-    let BM_cancel = CancellationToken::new();
     let BM_token = BM_cancel.clone();
     let BM_consumer = tokio::spawn(async move {
         let mut BM_tick = tokio::time::interval(Duration::from_secs(BM_config.BM_interval_seconds));

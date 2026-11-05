@@ -1,6 +1,6 @@
 # Rust 评论队列与 Goose 运行时
 
-当前实现是第一份代码 PR 的范围：独立 API library、单个常驻后台、持久化队列和进程内 Goose 执行。真实账号接入和桌面页面尚未实现。
+当前实现包含独立 API library、单个常驻后台、持久化队列、进程内 Goose 执行，以及 Goose 桌面管理页面。真实账号接入尚未完成。
 
 ## 已实现
 
@@ -8,9 +8,11 @@
 - 账号/作品/评论标识去重，SQLite 私有落盘；暂停状态持久化，空队列不调用模型。
 - external 专用会话显式设置空扩展集合，只有 Goose 原生 `recipe__final_output`；不加载管理员 Plugin、Skill 发现或代码执行工具。
 
+
 原生测试证实当前 Goose 在状态机里自动提供 `load_skill`，不受扩展列表控制。因此增加了最小的 `StateMachineServicesConfig.BM_disable_skills`：默认 false；本后台设置 true，不注册 SkillOperation 的发现、加载和快捷命令路径。它是运行时级开关，不是完整角色系统。评论后台不在同一 Runtime 内执行管理员工具会话。
+
 - 候选回复仅从已被 Goose 接受的结构化输出提取，受长度和关键词规则约束。
-- 本地管理 API 使用 Bearer Token，拒绝带 Origin 的管理请求；返回状态和数量，不返回评论正文。
+- 本地管理 API 使用 Bearer Token，拒绝带 Origin 的管理请求；状态接口只返回计数，记录接口仅向授权管理员返回私有评论与候选回复。
 - 官方 Webhook 按原始请求体验签，校验应用/账号，按 Msg-Id 私有记录，支持 challenge。
 - 发送尝试状态先落盘；发送中崩溃转为 unknown，不自动重发。
 
@@ -29,9 +31,26 @@ just watch-resume /path/to/private/BM_watch.local.json
 just watch-stop /path/to/private/BM_watch.local.json
 ```
 
-`watch-start` 前台启动服务，新队列默认暂停；`watch-resume` 才启用消费。符合关键词规则的队列内容会通过 Goose 调用配置的 LLM，其他内容进入 review。`watch-stop` 暂停消费和新的提交，保留进程及数据。系统服务托管和关闭桌面后的完整产品生命周期将在桌面接入时补齐，当前不是已安装的 launchd 服务。
+`watch-start` 前台启动服务，新队列默认暂停；`watch-resume` 才启用消费。符合关键词规则的队列内容会通过 Goose 调用配置的 LLM，其他内容进入 review。`watch-stop` 暂停消费和新的提交，保留进程及数据。桌面端启动的后台使用 detached 进程和私有日志，关闭窗口或退出桌面应用后继续运行；没有自动安装 launchd，机器重启后需要重新启动后台。
 
 测试只使用临时目录、回环 HTTP、合成评论和模拟模型。`watch-test` 中包含真实 Goose Runtime 与模拟 OpenAI 响应的测试，不调用外部模型服务。
+
+## Goose 桌面入口
+
+在 `BM_custom` 运行 `just watch-build`，会同时准备桌面需要的后台二进制。已有桌面构建产物时用 `just start_goose_desk_debug` 启动；首次准备桌面环境用 `just build_goose_desk_debug`。
+
+侧栏选择“评论值守”，然后：
+
+1. 选择仓库外、权限为 0600 的私有 JSON 配置。页面只显示配置文件名和任务信息，管理 Token 留在 Electron 主进程。
+2. 点击“启动后台”，或连接已经启动的同一后台。新队列默认暂停；点击“开始值守”才启用消费。
+3. 查看队列计数、私有评论和候选回复，支持分页与跳过待审核/失败记录。
+4. “暂停值守”保留进程；“停止后台”先暂停、再请求退出。关闭窗口不停止后台，重新打开页面会读取私有绑定并重新连接。
+
+运行时的作品范围、关键词规则和间隔由认证后的任务接口返回。修改配置文件不会自动改变正在运行的任务，停止并重启后台后才生效。后台未连接时页面不加载记录，数据仍保存在原私有目录。
+
+调用链是 `BM_WatchView → preload → BM_ipc/BM_manager → BM_watch HTTP API → 队列/Goose Runtime`。IPC 复用 Goose 的已注册主窗口/主 frame 来源校验，不提供任意路径、URL 或命令代理。原有 Goose 聊天后端和模型配置入口保持独立，评论监控仍只有一个 Rust 进程。
+
+桌面调试构建中的后台二进制和中间产物被 Git 忽略，原子替换不会覆盖正在运行的可执行文件内容。
 
 ## 私有配置
 
@@ -45,6 +64,10 @@ just watch-stop /path/to/private/BM_watch.local.json
 | --- | --- |
 | `GET /health` | PID；不含业务数据 |
 | `GET /BM/status` | 认证后读取启用状态与队列计数 |
+| `GET /BM/task` | 认证后读取进程实际使用的任务规则和间隔，无凭据 |
+| `GET /BM/records?BM_before=id` | 认证后分页读取私有评论与候选，每页最多 50 条 |
+| `POST /BM/skip` | 认证后跳过待审核/失败记录，其他状态返回冲突 |
+| `POST /BM/shutdown` | 认证后暂停并请求后台退出 |
 | `POST /BM/messages` | 认证后写入归一化评论；只接受配置的账号和作品 |
 | `POST /BM/resume` / `/BM/pause` | 认证后启用或暂停 |
 | `POST /BM/webhook` | 独立平台验签；原始事件私有记录与去重，不运行模型 |

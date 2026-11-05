@@ -13,7 +13,7 @@ pub struct BM_Decision {
     pub BM_text: String,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BM_Rules {
     pub BM_account: String,

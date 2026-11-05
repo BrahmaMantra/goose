@@ -63,6 +63,10 @@ do_not_version/
 /temporal.db
 /ui/desktop/src/bin/goose-scheduler-executor
 /ui/desktop/src/bin/goose
+/ui/desktop/src/bin/goose.BM_new
+/ui/desktop/src/bin/BM_watch
+/ui/desktop/src/bin/BM_watch.exe
+/ui/desktop/src/bin/BM_watch.BM_new
 /.env
 
 /working_dir

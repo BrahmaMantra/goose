@@ -108,14 +108,65 @@ describe('BM desktop manager boundary', () => {
     await expect(BM_manager.BM_action('resume')).rejects.toThrow('旧');
     expect(BM_routes).not.toContain('/BM/resume');
   });
-  it('accepts desktop selection only from the configured private directory', async () => {
-    expect((await BM_manager.BM_bindFromDirectory(BM_file, BM_root)).BM_configured).toBe(true);
-    const BM_other = path.join(BM_root, 'BM_other');
-    await fs.mkdir(BM_other, { mode: 0o700 });
-    await expect(BM_manager.BM_bindFromDirectory(BM_file, BM_other)).rejects.toThrow(
-      '统一私有配置目录'
+  it('lists private configs without credentials or paths, and validates selection IDs', async () => {
+    const BM_other = path.join(BM_root, 'BM_watch_0123456789abcdef.local.json');
+    await fs.copyFile(BM_file, BM_other);
+    await fs.chmod(BM_other, 0o600);
+    await fs.writeFile(path.join(BM_root, 'BM_watch_1111111111111111.local.json'), '{}', {
+      mode: 0o600,
+    });
+    await fs.writeFile(path.join(BM_root, 'BM_account.local.json'), '{}', { mode: 0o600 });
+    const BM_list = await BM_manager.BM_listConfigs(BM_root);
+    expect(BM_list).toHaveLength(2);
+    expect(BM_list[0].BM_work_count).toBe(1);
+    expect(JSON.stringify(BM_list)).not.toContain(BM_token);
+    expect(JSON.stringify(BM_list)).not.toContain(BM_root);
+    for (const BM_bad of ['../BM_watch.local.json', BM_file, 'BM_account.local.json', null])
+      await expect(BM_manager.BM_selectConfig(BM_bad, BM_root)).rejects.toThrow('列表');
+    const BM_link = path.join(BM_root, 'BM_watch_2222222222222222.local.json');
+    await fs.symlink(BM_file, BM_link);
+    await expect(BM_manager.BM_selectConfig(path.basename(BM_link), BM_root)).rejects.toThrow();
+    await BM_manager.BM_selectConfig('BM_watch.local.json', BM_root);
+    expect(
+      (await BM_manager.BM_listConfigs(BM_root)).find((BM_entry) => BM_entry.BM_selected)?.BM_id
+    ).toBe('BM_watch.local.json');
+    await expect(BM_manager.BM_selectConfig(path.basename(BM_other), BM_root)).rejects.toThrow(
+      '停止'
     );
   });
+  it('reuses the bound directory despite a changed default and migrates legacy configs once', async () => {
+    const BM_profile = path.join(BM_root, 'BM_profile_saved');
+    await fs.mkdir(BM_profile, { mode: 0o700 });
+    const BM_old = path.join(BM_profile, 'BM_watch.local.json');
+    const BM_config = JSON.parse(await fs.readFile(BM_file, 'utf8'));
+    BM_config.BM_rules.BM_works = ['12345678'];
+    await fs.writeFile(BM_old, JSON.stringify(BM_config), { mode: 0o600 });
+    await BM_manager.BM_bind(BM_old);
+    expect(await BM_manager.BM_configDirectory(path.join(BM_root, 'BM_unused'))).toBe(BM_root);
+    const BM_list = await BM_manager.BM_listConfigs(BM_root);
+    expect(BM_list.filter((BM_entry) => BM_entry.BM_selected)).toHaveLength(1);
+    expect(BM_list.find((BM_entry) => BM_entry.BM_selected)?.BM_id).toMatch(
+      /^BM_watch_[a-f0-9]{16}/
+    );
+    expect(await BM_manager.BM_listConfigs(BM_root)).toEqual(BM_list);
+  });
+  it.each(['deleted', 'corrupt'])(
+    'keeps a %s config manageable after desktop restart',
+    async (BM_case) => {
+      await BM_manager.BM_bind(BM_file);
+      if (BM_case === 'deleted') await fs.rm(BM_file);
+      else await fs.writeFile(BM_file, '{}');
+      const BM_restarted = new BM_WatchManager(BM_binding, BM_binary);
+      const BM_state = await BM_restarted.BM_snapshot();
+      expect(BM_state.BM_configured).toBe(false);
+      expect(BM_state.BM_running).toBe(true);
+      await BM_restarted.BM_action('pause');
+      await expect(BM_restarted.BM_action('resume')).rejects.toThrow();
+      await BM_restarted.BM_action('shutdown');
+      expect(BM_routes).toContain('/BM/shutdown');
+      expect(JSON.stringify(BM_state)).not.toContain(BM_token);
+    }
+  );
   it('projects actual running task without tokens or private paths and persists binding', async () => {
     const BM_snapshot = await BM_manager.BM_bind(BM_file);
     expect(BM_snapshot.BM_running).toBe(true);

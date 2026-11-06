@@ -7,8 +7,15 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { z } from 'zod';
-import { BM_outsideCheckout, BM_flattenConfigs } from './BM_privateConfig';
 import {
+  BM_outsideCheckout,
+  BM_flattenConfigs,
+  BM_flatConfigPath,
+  BM_accountSchema,
+} from './BM_privateConfig';
+import {
+  BM_configIdSchema,
+  type BM_ConfigEntry,
   BM_actionSchema,
   BM_rulesSchema,
   BM_taskSchema,
@@ -44,6 +51,19 @@ const BM_configSchema = z
   .strict();
 type BM_Config = z.infer<typeof BM_configSchema>;
 
+const BM_connectionSchema = z.object({
+  BM_port: z.number().int().min(1).max(65535).default(8791),
+  BM_admin_token: z.string().min(24),
+});
+type BM_Connection = z.infer<typeof BM_connectionSchema>;
+const BM_bindingSchema = z
+  .object({
+    BM_config: z.string().min(1),
+    BM_connection: BM_connectionSchema.optional(),
+  })
+  .strict();
+type BM_Binding = z.infer<typeof BM_bindingSchema>;
+
 export class BM_WatchManager {
   private BM_pending: Promise<unknown> = Promise.resolve();
   constructor(
@@ -62,15 +82,39 @@ export class BM_WatchManager {
       await BM_handle.close();
     }
   }
-  private async BM_binding(): Promise<string | null> {
+  private async BM_bindingRecord(): Promise<BM_Binding | null> {
     try {
-      return z
-        .object({ BM_config: z.string().min(1) })
-        .strict()
-        .parse(JSON.parse(await this.BM_privateRead(this.BM_bindingFile))).BM_config;
+      return BM_bindingSchema.parse(JSON.parse(await this.BM_privateRead(this.BM_bindingFile)));
     } catch (BM_error) {
       if (BM_errorCode(BM_error) === 'ENOENT') return null;
       throw new Error('无法读取已绑定的私有配置');
+    }
+  }
+  private async BM_binding(): Promise<string | null> {
+    return (await this.BM_bindingRecord())?.BM_config ?? null;
+  }
+  private async BM_saveBinding(BM_record: BM_Binding): Promise<void> {
+    await fs.mkdir(path.dirname(this.BM_bindingFile), { recursive: true, mode: 0o700 });
+    const BM_tmp = `${this.BM_bindingFile}.BM_${randomUUID()}`;
+    try {
+      await fs.writeFile(BM_tmp, JSON.stringify(BM_record), { mode: 0o600, flag: 'wx' });
+      await fs.rename(BM_tmp, this.BM_bindingFile);
+    } finally {
+      await fs.rm(BM_tmp, { force: true });
+    }
+  }
+  private async BM_connection(): Promise<BM_Connection> {
+    const BM_record = await this.BM_bindingRecord();
+    if (!BM_record) throw new Error('尚未绑定后台管理连接');
+    if (BM_record.BM_connection) return BM_record.BM_connection;
+    try {
+      const BM_connection = BM_connectionSchema.parse(
+        JSON.parse(await this.BM_privateRead(BM_record.BM_config))
+      );
+      await this.BM_saveBinding({ ...BM_record, BM_connection });
+      return BM_connection;
+    } catch {
+      throw new Error('无法读取后台管理连接，请选择原私有配置');
     }
   }
   private async BM_outsideCheckout(BM_path: string): Promise<void> {
@@ -78,21 +122,70 @@ export class BM_WatchManager {
   }
   async BM_configDirectory(BM_default: string): Promise<string> {
     try {
-      await BM_flattenConfigs(BM_default);
-      return BM_default;
+      const BM_file = await this.BM_binding();
+      let BM_directory = BM_file ? path.dirname(BM_file) : BM_default;
+      if (/^BM_profile_/.test(path.basename(BM_directory))) {
+        BM_directory = path.dirname(BM_directory);
+        if (path.basename(BM_directory) === 'BM_profiles')
+          BM_directory = path.dirname(BM_directory);
+      }
+      await BM_flattenConfigs(BM_directory);
+      return BM_directory;
     } catch {
       throw new Error('无法准备统一私有配置目录，请检查目录与旧配置权限');
     }
   }
-  async BM_bindFromDirectory(BM_file: string, BM_root: string): Promise<BM_Snapshot> {
-    try {
-      const BM_parent = await fs.realpath(path.dirname(BM_file));
-      const BM_directory = await fs.realpath(BM_root);
-      if (BM_parent !== BM_directory) throw new Error('请选择统一私有配置目录中的 JSON 文件');
-    } catch {
-      throw new Error('请选择统一私有配置目录中的有效 JSON 文件');
+  async BM_listConfigs(BM_default: string): Promise<BM_ConfigEntry[]> {
+    const BM_root = await this.BM_configDirectory(BM_default);
+    const BM_bound = await this.BM_binding();
+    const BM_selected =
+      BM_bound && /^BM_profile_/.test(path.basename(path.dirname(BM_bound)))
+        ? BM_flatConfigPath(BM_root, path.dirname(BM_bound))
+        : BM_bound;
+    const BM_result: BM_ConfigEntry[] = [];
+    for (const BM_file of await fs.readdir(BM_root, { withFileTypes: true })) {
+      if (!BM_file.isFile() || !BM_configIdSchema.safeParse(BM_file.name).success) continue;
+      try {
+        const BM_path = path.join(BM_root, BM_file.name);
+        const BM_config = await this.BM_config(BM_path);
+        let BM_name = BM_config.BM_rules.BM_account;
+        try {
+          const BM_accountFile = path.join(
+            path.dirname(BM_config.BM_data_dir),
+            'BM_account.local.json'
+          );
+          await this.BM_outsideCheckout(BM_accountFile);
+          const BM_account = BM_accountSchema.parse(
+            (({ BM_display_name, BM_douyin_id }) => ({ BM_display_name, BM_douyin_id }))(
+              JSON.parse(await this.BM_privateRead(BM_accountFile))
+            )
+          );
+          if (BM_account.BM_douyin_id === BM_config.BM_rules.BM_account)
+            BM_name = BM_account.BM_display_name;
+        } catch {
+          // Manually prepared configurations may not have a saved creator identity.
+        }
+        BM_result.push({
+          BM_id: BM_file.name,
+          BM_name,
+          BM_account: BM_config.BM_rules.BM_account,
+          BM_work_count: BM_config.BM_rules.BM_works.length,
+          BM_selected: BM_path === BM_selected,
+        });
+      } catch {
+        // Skip incomplete, invalid or non-private files without exposing their contents.
+      }
     }
-    return this.BM_bind(BM_file);
+    return BM_result.sort(
+      (BM_a, BM_b) =>
+        Number(BM_b.BM_selected) - Number(BM_a.BM_selected) || BM_a.BM_id.localeCompare(BM_b.BM_id)
+    );
+  }
+  async BM_selectConfig(BM_id: unknown, BM_default: string): Promise<BM_Snapshot> {
+    const BM_checked = BM_configIdSchema.safeParse(BM_id);
+    if (!BM_checked.success) throw new Error('请选择列表中的有效私有配置');
+    const BM_root = await this.BM_configDirectory(BM_default);
+    return this.BM_bind(path.join(BM_root, BM_checked.data));
   }
   private async BM_config(BM_file: string): Promise<BM_Config> {
     try {
@@ -111,23 +204,16 @@ export class BM_WatchManager {
       if ((await this.BM_snapshot()).BM_running) throw new Error('请先停止后台，再切换配置');
       if (!path.isAbsolute(BM_file)) throw new Error('请选择私有配置文件');
       await this.BM_outsideCheckout(BM_file);
-      await this.BM_config(BM_file);
-      await fs.mkdir(path.dirname(this.BM_bindingFile), { recursive: true, mode: 0o700 });
-      const BM_tmp = `${this.BM_bindingFile}.BM_${randomUUID()}`;
-      try {
-        await fs.writeFile(BM_tmp, JSON.stringify({ BM_config: BM_file }), {
-          mode: 0o600,
-          flag: 'wx',
-        });
-        await fs.rename(BM_tmp, this.BM_bindingFile);
-      } finally {
-        await fs.rm(BM_tmp, { force: true });
-      }
+      const BM_config = await this.BM_config(BM_file);
+      await this.BM_saveBinding({
+        BM_config: BM_file,
+        BM_connection: BM_connectionSchema.parse(BM_config),
+      });
       return this.BM_snapshot();
     });
   }
   private BM_request(
-    BM_config: BM_Config,
+    BM_config: BM_Connection,
     BM_route: string,
     BM_method = 'GET',
     BM_body?: unknown,
@@ -194,33 +280,45 @@ export class BM_WatchManager {
       BM_interval_seconds: 30,
     };
     if (!BM_file) return BM_base;
-    const BM_config = await this.BM_config(BM_file);
-    Object.assign(BM_base, {
-      BM_configured: true,
-      BM_config_name: path.basename(BM_file),
-      BM_account: BM_config.BM_rules.BM_account,
-      BM_works: BM_config.BM_rules.BM_works,
-      BM_deny_contains: BM_config.BM_rules.BM_deny_contains,
-      BM_reply_marker: BM_config.BM_rules.BM_reply_marker,
-      BM_max_reply_chars: BM_config.BM_rules.BM_max_reply_chars,
-      BM_interval_seconds: BM_config.BM_interval_seconds,
-    });
     try {
-      const BM_status = BM_statusSchema.parse(await this.BM_request(BM_config, '/BM/status'));
-      const BM_taskRaw = await this.BM_request(BM_config, '/BM/task');
-      const BM_task = BM_taskSchema.parse(BM_taskRaw);
-      const BM_requires_restart = !(
-        'BM_deny_contains' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
-        'BM_reply_marker' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules
-      );
-      return {
-        ...BM_base,
-        ...BM_status,
-        ...BM_task.BM_rules,
-        BM_interval_seconds: BM_task.BM_interval_seconds,
-        BM_running: true,
-        BM_requires_restart,
-      };
+      const BM_config = await this.BM_config(BM_file);
+      Object.assign(BM_base, {
+        BM_configured: true,
+        BM_config_name: path.basename(BM_file),
+        ...BM_config.BM_rules,
+        BM_interval_seconds: BM_config.BM_interval_seconds,
+      });
+    } catch {
+      BM_base.BM_config_name = path.basename(BM_file);
+      BM_base.BM_error = '配置文件暂时不可用；仍可使用已保存的连接停止后台';
+    }
+    try {
+      const BM_connection = await this.BM_connection();
+      const BM_status = BM_statusSchema.parse(await this.BM_request(BM_connection, '/BM/status'));
+      try {
+        const BM_taskRaw = await this.BM_request(BM_connection, '/BM/task');
+        const BM_task = BM_taskSchema.parse(BM_taskRaw);
+        const BM_requires_restart = !(
+          'BM_deny_contains' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
+          'BM_reply_marker' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules
+        );
+        return {
+          ...BM_base,
+          ...BM_status,
+          ...BM_task.BM_rules,
+          BM_interval_seconds: BM_task.BM_interval_seconds,
+          BM_running: true,
+          BM_requires_restart,
+        };
+      } catch {
+        return {
+          ...BM_base,
+          ...BM_status,
+          BM_running: true,
+          BM_requires_restart: true,
+          BM_error: '后台已连接，任务信息暂不可用；可以暂停或停止后台',
+        };
+      }
     } catch {
       return { ...BM_base, BM_error: '后台未连接；可启动后台或检查私有配置' };
     }
@@ -230,9 +328,13 @@ export class BM_WatchManager {
     return this.BM_serial(async () => {
       const BM_file = await this.BM_binding();
       if (!BM_file) throw new Error('请先选择私有配置');
-      const BM_config = await this.BM_config(BM_file);
       if (BM_checked === 'start') {
         if ((await this.BM_snapshot()).BM_running) return this.BM_snapshot();
+        const BM_config = await this.BM_config(BM_file);
+        await this.BM_saveBinding({
+          BM_config: BM_file,
+          BM_connection: BM_connectionSchema.parse(BM_config),
+        });
         await this.BM_launch(BM_file, BM_config);
         const BM_deadline = Date.now() + 12000;
         while (Date.now() < BM_deadline) {
@@ -247,9 +349,12 @@ export class BM_WatchManager {
         }
         throw new Error('后台启动失败，请检查私有日志或端口');
       }
-      if (BM_checked === 'resume' && (await this.BM_snapshot()).BM_requires_restart)
-        throw new Error('后台版本较旧，请先停止并重新启动后台，以使用新的触发规则');
-      await this.BM_request(BM_config, `/BM/${BM_checked}`, 'POST');
+      if (BM_checked === 'resume') {
+        const BM_snapshot = await this.BM_snapshot();
+        if (BM_snapshot.BM_requires_restart || !BM_snapshot.BM_configured)
+          throw new Error('请检查配置并停止、重启旧后台后再开始值守');
+      }
+      await this.BM_request(await this.BM_connection(), `/BM/${BM_checked}`, 'POST');
       if (BM_checked === 'shutdown')
         return {
           ...(await this.BM_snapshot()),
@@ -301,7 +406,7 @@ export class BM_WatchManager {
       z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_before);
     const BM_file = await this.BM_binding();
     if (!BM_file) return [];
-    const BM_config = await this.BM_config(BM_file);
+    const BM_config = await this.BM_connection();
     return BM_recordsSchema.parse(
       await this.BM_request(BM_config, `/BM/records${BM_before ? `?BM_before=${BM_before}` : ''}`)
     ).BM_records;
@@ -310,6 +415,6 @@ export class BM_WatchManager {
     z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);
     const BM_file = await this.BM_binding();
     if (!BM_file) throw new Error('请先选择私有配置');
-    await this.BM_request(await this.BM_config(BM_file), '/BM/skip', 'POST', { BM_id });
+    await this.BM_request(await this.BM_connection(), '/BM/skip', 'POST', { BM_id });
   }
 }

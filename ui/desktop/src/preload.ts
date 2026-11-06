@@ -1,7 +1,7 @@
 import Electron, { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { Recipe } from './recipe';
 import type { GooseApp } from './types/apps';
-import type { BM_Record, BM_Snapshot, BM_WatchAction } from './BM_watch/BM_types';
+import type { BM_ConfigEntry, BM_Record, BM_Snapshot, BM_WatchAction } from './BM_watch/BM_types';
 import type { Settings, SettingKey } from './utils/settings';
 import { defaultSettings } from './utils/settings';
 import type { OpenExternalUrlResult } from './utils/urlSecurity';
@@ -99,7 +99,8 @@ export interface CreateChatWindowOptions {
 
 // Define the API types in a single place
 type ElectronAPI = {
-  BM_watchSelectConfig: () => Promise<BM_Snapshot | null>;
+  BM_watchListConfigs: () => Promise<BM_ConfigEntry[]>;
+  BM_watchSelectConfig: (BM_id: string) => Promise<BM_Snapshot>;
   BM_watchLogin: (
     BM_action: 'open' | 'confirm' | 'cancel'
   ) => Promise<import('./BM_watch/BM_login').BM_LoginResult>;
@@ -206,7 +207,8 @@ type AppConfigAPI = {
 };
 
 const electronAPI: ElectronAPI = {
-  BM_watchSelectConfig: () => ipcRenderer.invoke('BM-watch:select'),
+  BM_watchListConfigs: () => ipcRenderer.invoke('BM-watch:configs'),
+  BM_watchSelectConfig: (BM_id) => ipcRenderer.invoke('BM-watch:select', BM_id),
   BM_watchLogin: (BM_action) => ipcRenderer.invoke('BM-watch:login', BM_action),
   BM_watchCreateConfig: (BM_input) => ipcRenderer.invoke('BM-watch:create', BM_input),
   BM_watchListWorks: (BM_action) => ipcRenderer.invoke('BM-watch:works', BM_action),

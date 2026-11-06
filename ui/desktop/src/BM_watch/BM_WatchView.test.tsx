@@ -20,6 +20,15 @@ beforeEach(() => {
   };
   Object.assign(window.electron, {
     BM_watchSnapshot: vi.fn(async () => BM_snapshot),
+    BM_watchListConfigs: vi.fn(async () => [
+      {
+        BM_id: 'BM_watch.local.json',
+        BM_name: 'BM Creator',
+        BM_account: 'BM_owner',
+        BM_work_count: 1,
+        BM_selected: true,
+      },
+    ]),
     BM_watchSelectConfig: vi.fn(async () => BM_snapshot),
     BM_watchRecords: vi.fn(async () => [
       {
@@ -53,6 +62,40 @@ describe('BM watch desktop page', () => {
     fireEvent.click(screen.getByRole('button', { name: '跳过' }));
     await waitFor(() => expect(window.electron.BM_watchSkip).toHaveBeenCalledWith(1));
     expect(screen.getByText(/当前平台接入尚未完成/)).toBeInTheDocument();
+  });
+  it('shows saved configurations in the page and binds the clicked entry', async () => {
+    BM_snapshot = { ...BM_snapshot, BM_running: false, BM_enabled: false };
+    render(<BM_WatchView />);
+    await screen.findByText('BM_watch.local.json');
+    fireEvent.click(screen.getByRole('button', { name: '选择私有配置' }));
+    const BM_entry = await screen.findByRole('button', {
+      name: '选择配置 BM Creator BM_watch.local.json',
+    });
+    expect(screen.getByText('当前配置')).toBeInTheDocument();
+    expect(window.electron.BM_watchSelectConfig).not.toHaveBeenCalled();
+    fireEvent.click(BM_entry);
+    await waitFor(() =>
+      expect(window.electron.BM_watchSelectConfig).toHaveBeenCalledWith('BM_watch.local.json')
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '已保存的私有配置' })).not.toBeInTheDocument()
+    );
+  });
+  it('explains an empty saved-config list', async () => {
+    BM_snapshot = { ...BM_snapshot, BM_running: false };
+    vi.mocked(window.electron.BM_watchListConfigs).mockResolvedValue([]);
+    render(<BM_WatchView />);
+    await screen.findByText('BM_watch.local.json');
+    fireEvent.click(screen.getByRole('button', { name: '选择私有配置' }));
+    await screen.findByText(/暂无可用配置/);
+  });
+  it('allows stopping a running backend even when its configuration is unavailable', async () => {
+    BM_snapshot = { ...BM_snapshot, BM_configured: false, BM_error: 'BM unavailable' };
+    render(<BM_WatchView />);
+    await screen.findByText('BM unavailable');
+    expect(screen.getByRole('button', { name: '启动后台' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '停止后台' }));
+    await waitFor(() => expect(window.electron.BM_watchAction).toHaveBeenCalledWith('shutdown'));
   });
   it('requires a selected configuration and connection before enabling consumption', async () => {
     BM_snapshot = { ...BM_snapshot, BM_configured: false, BM_running: false, BM_enabled: false };

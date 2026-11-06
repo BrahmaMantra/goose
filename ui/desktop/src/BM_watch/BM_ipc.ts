@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import { findGooseBinaryPath } from '../gooseServe';
@@ -34,25 +34,21 @@ export function BM_registerWatchIpc(
       ? process.env.GOOSE_PATH_ROOT
       : null;
   const BM_privateRoot = BM_defaultPrivateRoot(os.homedir(), BM_gooseRoot ?? undefined);
-  ipcMain.handle('BM-watch:select', async (BM_event) => {
-    const BM_window = BM_requireWindow(BM_event);
-    const BM_directory = await BM_manager.BM_configDirectory(BM_privateRoot);
-    const BM_result = await dialog.showOpenDialog(BM_window, {
-      title: '选择评论值守私有配置',
-      properties: ['openFile'],
-      defaultPath: BM_directory,
-      filters: [{ name: 'JSON', extensions: ['json'] }],
-    });
-    return BM_result.canceled
-      ? null
-      : BM_manager.BM_bindFromDirectory(BM_result.filePaths[0], BM_directory);
+  ipcMain.handle('BM-watch:configs', async (BM_event) => {
+    BM_requireWindow(BM_event);
+    return BM_manager.BM_listConfigs(BM_privateRoot);
+  });
+  ipcMain.handle('BM-watch:select', async (BM_event, BM_id: unknown) => {
+    BM_requireWindow(BM_event);
+    return BM_manager.BM_selectConfig(BM_id, BM_privateRoot);
   });
   ipcMain.handle('BM-watch:login', async (BM_event, BM_action: unknown) => {
     const BM_window = BM_requireWindow(BM_event);
     const BM_checked = z.enum(['open', 'confirm', 'cancel']).parse(BM_action);
     if (BM_checked === 'cancel') return BM_login.BM_cancel(BM_window);
     if ((await BM_manager.BM_snapshot()).BM_running) throw new Error('请先停止后台，再创建配置');
-    if (BM_checked === 'open') return BM_login.BM_open(BM_window, BM_privateRoot);
+    if (BM_checked === 'open')
+      return BM_login.BM_open(BM_window, await BM_manager.BM_configDirectory(BM_privateRoot));
     return BM_login.BM_confirm(BM_window);
   });
   ipcMain.handle('BM-watch:create', async (BM_event, BM_input: unknown) => {

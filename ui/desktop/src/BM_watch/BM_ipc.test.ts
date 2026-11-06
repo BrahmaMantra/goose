@@ -3,7 +3,8 @@ import type { IpcMainInvokeEvent, BrowserWindow } from 'electron';
 const BM_handlers = new Map<string, (...BM_args: unknown[]) => unknown>();
 const BM_bind = vi.fn();
 const BM_snapshot = vi.fn();
-const BM_dialog = vi.fn();
+const BM_list = vi.fn();
+const BM_select = vi.fn();
 const BM_loginOpen = vi.fn();
 const BM_loginSave = vi.fn();
 beforeEach(() => {
@@ -12,7 +13,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.doMock('electron', () => ({
     app: { getPath: () => '/tmp/BM_userData', getAppPath: () => '/tmp/BM_app', isPackaged: false },
-    dialog: { showOpenDialog: BM_dialog },
     ipcMain: {
       handle: (BM_name: string, BM_handler: (...BM_args: unknown[]) => unknown) =>
         BM_handlers.set(BM_name, BM_handler),
@@ -22,7 +22,8 @@ beforeEach(() => {
   vi.doMock('./BM_manager', () => ({
     BM_WatchManager: class {
       BM_bind = BM_bind;
-      BM_bindFromDirectory = async (BM_file: string) => BM_bind(BM_file);
+      BM_listConfigs = BM_list;
+      BM_selectConfig = BM_select;
       BM_snapshot = BM_snapshot;
       BM_action = vi.fn();
       BM_records = vi.fn();
@@ -48,15 +49,17 @@ it('checks renderer provenance before touching configuration or records', async 
   expect(() => BM_handlers.get('BM-watch:snapshot')?.({})).toThrow('untrusted frame');
   await expect(BM_handlers.get('BM-watch:select')?.({})).rejects.toThrow('untrusted frame');
   expect(BM_snapshot).not.toHaveBeenCalled();
-  expect(BM_dialog).not.toHaveBeenCalled();
+  await expect(BM_handlers.get('BM-watch:configs')?.({})).rejects.toThrow('untrusted frame');
+  expect(BM_list).not.toHaveBeenCalled();
+  expect(BM_select).not.toHaveBeenCalled();
 });
-it('only binds the file selected by the main-process dialog', async () => {
+it('lists and selects only through the main-process private root', async () => {
   const { BM_registerWatchIpc } = await import('./BM_ipc');
-  BM_dialog.mockResolvedValue({ canceled: false, filePaths: ['/tmp/BM_selected.json'] });
   BM_registerWatchIpc((_BM_event: IpcMainInvokeEvent) => ({}) as BrowserWindow);
-  await BM_handlers.get('BM-watch:select')?.({}, '/tmp/BM_renderer_supplied.json');
-  expect(BM_bind).toHaveBeenCalledWith('/tmp/BM_selected.json');
-  expect(BM_dialog.mock.calls[0][1].defaultPath).toBe('/tmp/BM_private');
+  await BM_handlers.get('BM-watch:configs')?.({});
+  await BM_handlers.get('BM-watch:select')?.({}, 'BM_watch.local.json');
+  expect(BM_list).toHaveBeenCalledOnce();
+  expect(BM_select).toHaveBeenCalledWith('BM_watch.local.json', BM_list.mock.calls[0][0]);
 });
 it('rejects untrusted login and config creation before opening a browser or writing data', async () => {
   const { BM_registerWatchIpc } = await import('./BM_ipc');

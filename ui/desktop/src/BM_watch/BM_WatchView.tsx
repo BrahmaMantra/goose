@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderOpen, Play, Pause, Square, RefreshCw, MessageSquare } from 'lucide-react';
 import { MainPanelLayout } from '../components/Layout/MainPanelLayout';
 import { Button } from '../components/ui/button';
-import type { BM_Record, BM_Snapshot, BM_WatchAction } from './BM_types';
+import type { BM_ConfigEntry, BM_Record, BM_Snapshot, BM_WatchAction } from './BM_types';
 import BM_CreateConfigView from './BM_CreateConfigView';
 
 const BM_labels: Record<string, string> = {
@@ -21,6 +21,7 @@ export default function BM_WatchView() {
   const [BM_records, BM_setRecords] = useState<BM_Record[]>([]);
   const [BM_busy, BM_setBusy] = useState(false);
   const [BM_error, BM_setError] = useState('');
+  const [BM_configs, BM_setConfigs] = useState<BM_ConfigEntry[] | null>(null);
   const [BM_creating, BM_setCreating] = useState(false);
   const BM_cursor = useRef<number | undefined>(undefined);
   const BM_refresh = useCallback(async (BM_reset = false) => {
@@ -55,18 +56,30 @@ export default function BM_WatchView() {
       BM_setBusy(false);
     }
   };
-  const BM_select = async () => {
+  const BM_listConfigs = async () => {
     BM_setBusy(true);
     BM_setError('');
     try {
-      const BM_next = await window.electron.BM_watchSelectConfig();
+      BM_setConfigs(await window.electron.BM_watchListConfigs());
+    } catch {
+      BM_setError('无法读取已保存配置，请检查私有目录权限。');
+    } finally {
+      BM_setBusy(false);
+    }
+  };
+  const BM_select = async (BM_id: string) => {
+    BM_setBusy(true);
+    BM_setError('');
+    try {
+      const BM_next = await window.electron.BM_watchSelectConfig(BM_id);
       if (BM_next) {
         BM_cursor.current = undefined;
         BM_setSnapshot(BM_next);
         BM_setRecords([]);
+        BM_setConfigs(null);
       }
     } catch {
-      BM_setError('无法绑定配置。请使用仓库外的私有 JSON 文件，并先停止现有后台。');
+      BM_setError('无法使用此配置，请刷新列表，并先停止现有后台。');
     } finally {
       BM_setBusy(false);
     }
@@ -133,7 +146,7 @@ export default function BM_WatchView() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  void BM_select();
+                  void BM_listConfigs();
                 }}
                 disabled={BM_busy || BM_running || BM_creating}
               >
@@ -143,7 +156,10 @@ export default function BM_WatchView() {
               <Button
                 variant="outline"
                 disabled={BM_busy || BM_running || BM_creating}
-                onClick={() => BM_setCreating(true)}
+                onClick={() => {
+                  BM_setConfigs(null);
+                  BM_setCreating(true);
+                }}
               >
                 创建新配置
               </Button>
@@ -222,6 +238,47 @@ export default function BM_WatchView() {
               关闭窗口后，已经启动的后台会继续运行。当前平台接入尚未完成：仅处理已入队消息并生成候选回复，不会自动读取或发送抖音评论。
             </p>
           </section>
+          {BM_configs !== null && (
+            <section
+              aria-label="已保存的私有配置"
+              className="rounded-xl border border-border-primary p-5 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="font-medium">已保存的私有配置</h2>
+                <Button variant="outline" onClick={() => BM_setConfigs(null)}>
+                  收起列表
+                </Button>
+              </div>
+              <p className="text-sm text-text-secondary">
+                选择之前创建并保存的配置；账号登录资料仍保存在本机私有目录。
+              </p>
+              {BM_configs.length === 0 && <p>暂无可用配置，请点击「创建新配置」完成扫码并保存。</p>}
+              <ul className="space-y-2">
+                {BM_configs.map((BM_config) => (
+                  <li key={BM_config.BM_id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-lg border border-border-primary p-4 text-left hover:bg-background-secondary disabled:opacity-50"
+                      disabled={BM_busy || BM_running || BM_creating}
+                      aria-label={`选择配置 ${BM_config.BM_name} ${BM_config.BM_id}`}
+                      onClick={() => {
+                        void BM_select(BM_config.BM_id);
+                      }}
+                    >
+                      <span className="font-medium">{BM_config.BM_name}</span>
+                      {BM_config.BM_selected && <span className="ml-3 text-sm">当前配置</span>}
+                      <span className="mt-1 block text-sm text-text-secondary">
+                        抖音号：{BM_config.BM_account} · {BM_config.BM_work_count} 条作品
+                      </span>
+                      <span className="mt-1 block text-xs text-text-secondary">
+                        {BM_config.BM_id}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {BM_creating && (
             <BM_CreateConfigView
               BM_onClose={() => BM_setCreating(false)}
@@ -233,9 +290,9 @@ export default function BM_WatchView() {
               }}
             />
           )}
-          {BM_error && (
+          {(BM_error || BM_snapshot?.BM_error) && (
             <p role="alert" className="rounded-lg bg-background-tertiary p-3 text-sm">
-              {BM_error}
+              {BM_error || BM_snapshot?.BM_error}
             </p>
           )}
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="队列统计">

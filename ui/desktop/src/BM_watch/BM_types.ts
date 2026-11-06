@@ -107,3 +107,12 @@ export interface BM_Snapshot {
   BM_interval_seconds: number;
   BM_error?: string;
 }
+
+export const BM_configIdSchema = z.string().regex(/^BM_watch(?:_[a-f0-9]{16})?\.local\.json$/);
+export interface BM_ConfigEntry {
+  BM_id: string;
+  BM_name: string;
+  BM_account: string;
+  BM_work_count: number;
+  BM_selected: boolean;
+}

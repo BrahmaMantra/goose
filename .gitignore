@@ -106,6 +106,11 @@ gooseselftest/
 live-in-desktop-design
 
 # BM_ Private runtime data (public repository contains examples and source only)
+/.local/
+**/BM_*.local.*
+**/BM_watch.binding.json
+**/BM_watch.binding.json.BM_*
+**/BM_queue.sqlite*
 /BM_private/
 /BM_local/
 /BM_runtime/

@@ -165,12 +165,21 @@ export default function BM_WatchView() {
               </dl>
             )}
             <p className="text-sm text-text-secondary">
-              回复条件：
-              {BM_snapshot?.BM_allow_contains.length
-                ? BM_snapshot.BM_allow_contains.join('、')
-                : '尚未配置自动处理关键词，消息将进入待审核'}
+              拒绝词：
+              {BM_snapshot?.BM_deny_contains.length
+                ? BM_snapshot.BM_deny_contains.join('、')
+                : '未配置；范围内的人工评论可进入模型处理'}
               。修改私有配置后，请停止并重新启动后台。
             </p>
+            <p className="text-sm text-text-secondary">
+              AI 回复标记：{BM_snapshot?.BM_reply_marker || ''}
+              。自己的人工评论也会触发，自己的 AI 回复会跳过。
+            </p>
+            {BM_snapshot?.BM_requires_restart && (
+              <p role="alert" className="text-sm">
+                后台是旧版本，请先停止并重新启动，以启用新触发规则和 AI 标记。
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <span className="mr-2 rounded-full bg-background-tertiary px-3 py-1 text-sm">
                 {!BM_running ? '后台未连接' : BM_snapshot?.BM_enabled ? '值守运行中' : '值守已暂停'}
@@ -189,7 +198,11 @@ export default function BM_WatchView() {
                 onClick={() => {
                   void BM_action(BM_snapshot?.BM_enabled ? 'pause' : 'resume');
                 }}
-                disabled={BM_busy || !BM_running}
+                disabled={
+                  BM_busy ||
+                  !BM_running ||
+                  (!BM_snapshot?.BM_enabled && BM_snapshot?.BM_requires_restart)
+                }
               >
                 {BM_snapshot?.BM_enabled ? <Pause size={16} /> : <Play size={16} />}
                 {BM_snapshot?.BM_enabled ? '暂停值守' : '开始值守'}

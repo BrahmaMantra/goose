@@ -45,7 +45,7 @@ async fn BM_process_auth_batches_and_restart() {
         .port();
     let BM_path = BM_root.join("BM_watch.local.json");
     let BM_token = "BM_synthetic_control_token_12345";
-    std::fs::write(&BM_path,serde_json::to_vec(&json!({"BM_data_dir":BM_root.join("BM_data"),"BM_goose_root":BM_root,"BM_admin_token":BM_token,"BM_interval_seconds":1,"BM_batch_size":1,"BM_port":BM_port,"BM_rules":{"BM_account":"BM_owner","BM_works":["BM_work"],"BM_allow_contains":[],"BM_max_reply_chars":100}})).unwrap()).unwrap();
+    std::fs::write(&BM_path,serde_json::to_vec(&json!({"BM_data_dir":BM_root.join("BM_data"),"BM_goose_root":BM_root,"BM_admin_token":BM_token,"BM_interval_seconds":1,"BM_batch_size":1,"BM_port":BM_port,"BM_rules":{"BM_account":"BM_owner","BM_works":["BM_work"],"BM_deny_contains":["synthetic"],"BM_max_reply_chars":100}})).unwrap()).unwrap();
     std::fs::set_permissions(&BM_path, std::fs::Permissions::from_mode(0o600)).unwrap();
     let mut BM_child = BM_start(&BM_path);
     let BM_pid = BM_child.0.id();
@@ -99,7 +99,7 @@ async fn BM_process_auth_batches_and_restart() {
                 .await
                 .unwrap();
             assert_eq!(BM_status["BM_pid"], BM_pid);
-            if BM_status["BM_counts"]["review"] == 2 {
+            if BM_status["BM_counts"]["skipped"] == 2 {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -115,6 +115,16 @@ async fn BM_process_auth_batches_and_restart() {
         .unwrap()
         .status()
         .is_success());
+    // Seed review records to exercise management endpoints without calling a model.
+    let BM_store = bm_watch::BM_store::BM_Store::BM_open(&BM_root.join("BM_data/BM_queue.sqlite"))
+        .await
+        .unwrap();
+    for BM_record in BM_store.BM_records(None).await.unwrap() {
+        BM_store
+            .BM_finish(BM_record.BM_id, "review", None)
+            .await
+            .unwrap();
+    }
     assert_eq!(
         BM_http
             .get(format!("{BM_base}/BM/records"))

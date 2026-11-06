@@ -14,6 +14,8 @@ pub struct BM_Comment {
     pub BM_comment: String,
     pub BM_author: String,
     pub BM_text: String,
+    #[serde(default)]
+    pub BM_is_ai_reply: bool,
 }
 
 #[derive(Clone)]
@@ -30,6 +32,11 @@ pub struct BM_Record {
 }
 
 impl BM_Store {
+    pub async fn BM_is_recorded_reply(&self, BM_message: &BM_Comment) -> Result<bool> {
+        Ok(sqlx::query_scalar::<_, i64>("SELECT EXISTS(SELECT 1 FROM BM_inbox WHERE BM_account=? AND BM_work=? AND BM_reply=? AND BM_status IN ('sending','accepted','unknown'))")
+            .bind(&BM_message.BM_account).bind(&BM_message.BM_work).bind(BM_message.BM_text.trim())
+            .fetch_one(&self.BM_pool).await? != 0)
+    }
     pub async fn BM_records(&self, BM_before: Option<i64>) -> Result<Vec<BM_Record>> {
         ensure!(BM_before.is_none_or(|BM_id| BM_id > 0), "invalid cursor");
         let BM_rows = sqlx::query("SELECT BM_id,BM_status,BM_payload,BM_reply FROM BM_inbox WHERE (? IS NULL OR BM_id < ?) ORDER BY BM_id DESC LIMIT 50")

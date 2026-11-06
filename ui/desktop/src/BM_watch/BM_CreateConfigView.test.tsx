@@ -49,6 +49,11 @@ it('loads official works after QR confirmation and saves only checked IDs', asyn
   fireEvent.click(screen.getByRole('button', { name: '已扫码，读取账号' }));
   await screen.findByText(/BM selectable work/);
   expect(window.electron.BM_watchListWorks).toHaveBeenCalledWith('refresh');
+  expect(screen.getByLabelText(/AI 回复标记/)).toHaveValue('【from deepseek】');
+  fireEvent.change(screen.getByLabelText(/拒绝词/), { target: { value: '/clear\n/delete' } });
+  fireEvent.change(screen.getByLabelText(/AI 回复标记/), {
+    target: { value: '【from BM model】' },
+  });
   const BM_checkboxes = screen.getAllByRole('checkbox');
   expect(BM_checkboxes[1]).toBeDisabled();
   fireEvent.click(BM_checkboxes[0]);
@@ -60,7 +65,8 @@ it('loads official works after QR confirmation and saves only checked IDs', asyn
   await waitFor(() => expect(BM_saved).toHaveBeenCalled());
   expect(window.electron.BM_watchCreateConfig).toHaveBeenCalledWith({
     BM_works: ['123456789'],
-    BM_allow_contains: [],
+    BM_deny_contains: ['/clear', '/delete'],
+    BM_reply_marker: '【from BM model】',
   });
   BM_view.unmount();
   expect(window.electron.BM_watchLogin).toHaveBeenCalledWith('cancel');

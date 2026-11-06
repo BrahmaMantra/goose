@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { z } from 'zod';
+import { BM_defaultReplyMarker, BM_replyMarkerSchema } from './BM_types';
 
 export async function BM_outsideCheckout(BM_path: string): Promise<void> {
   if (!path.isAbsolute(BM_path)) throw new Error('私有路径必须是绝对路径');
@@ -61,10 +62,11 @@ export const BM_createSchema = z
       .array(z.string().regex(/^\d{5,30}$/))
       .min(1)
       .max(100),
-    BM_allow_contains: z.array(z.string().trim().min(1).max(200)).max(100),
+    BM_deny_contains: z.array(z.string().trim().min(1).max(200)).max(100),
+    BM_reply_marker: BM_replyMarkerSchema.default(BM_defaultReplyMarker),
   })
   .strict();
-export type BM_CreateConfig = z.infer<typeof BM_createSchema>;
+export type BM_CreateConfig = z.input<typeof BM_createSchema>;
 
 export function BM_flatConfigPath(BM_root: string, BM_profile: string): string {
   const BM_key = createHash('sha256').update(BM_profile).digest('hex').slice(0, 16);
@@ -94,7 +96,9 @@ export async function BM_flattenConfigs(BM_root: string): Promise<void> {
       const BM_config = JSON.parse(BM_contents);
       BM_createSchema.parse({
         BM_works: BM_config.BM_rules?.BM_works,
-        BM_allow_contains: BM_config.BM_rules?.BM_allow_contains,
+        BM_deny_contains:
+          BM_config.BM_rules?.BM_deny_contains ?? BM_config.BM_rules?.BM_allow_contains ?? [],
+        BM_reply_marker: BM_config.BM_rules?.BM_reply_marker,
       });
     } finally {
       await BM_handle.close();
@@ -163,7 +167,8 @@ export async function BM_saveConfig(
           BM_rules: {
             BM_account: BM_identity.BM_douyin_id,
             BM_works: [...new Set(BM_rules.BM_works)],
-            BM_allow_contains: BM_rules.BM_allow_contains,
+            BM_deny_contains: BM_rules.BM_deny_contains,
+            BM_reply_marker: BM_rules.BM_reply_marker,
             BM_max_reply_chars: 200,
           },
         },

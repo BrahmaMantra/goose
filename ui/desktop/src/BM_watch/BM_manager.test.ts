@@ -21,13 +21,15 @@ let BM_manager: BM_WatchManager;
 let BM_port: number;
 let BM_enabled: boolean;
 let BM_extra: boolean;
+let BM_legacyTask: boolean;
 let BM_routes: string[];
 const BM_token = 'BM_synthetic_control_token_12345';
 const BM_rules = {
   BM_account: 'BM_owner',
   BM_works: ['BM_running_work'],
-  BM_allow_contains: ['question'],
+  BM_deny_contains: ['question'],
   BM_max_reply_chars: 200,
+  BM_reply_marker: '【from deepseek】',
 };
 
 beforeEach(async () => {
@@ -35,6 +37,7 @@ beforeEach(async () => {
   BM_routes = [];
   BM_enabled = true;
   BM_extra = false;
+  BM_legacyTask = false;
   BM_root = await fs.mkdtemp(path.join(os.tmpdir(), 'BM_desktop_'));
   BM_file = path.join(BM_root, 'BM_watch.local.json');
   BM_binding = path.join(BM_root, 'BM_binding.json');
@@ -50,7 +53,18 @@ beforeEach(async () => {
         BM_pid: 12345,
         ...(BM_extra ? { BM_admin_token: BM_token } : {}),
       };
-    if (BM_request.url === '/BM/task') BM_value = { BM_rules, BM_interval_seconds: 30 };
+    if (BM_request.url === '/BM/task')
+      BM_value = {
+        BM_rules: BM_legacyTask
+          ? {
+              BM_account: BM_rules.BM_account,
+              BM_works: BM_rules.BM_works,
+              BM_allow_contains: ['/clear'],
+              BM_max_reply_chars: 200,
+            }
+          : BM_rules,
+        BM_interval_seconds: 30,
+      };
     if (BM_request.url?.startsWith('/BM/records')) BM_value = { BM_records: [] };
     if (BM_request.url === '/BM/pause') {
       BM_enabled = false;
@@ -85,6 +99,15 @@ afterEach(async () => {
 });
 
 describe('BM desktop manager boundary', () => {
+  it('keeps old backends controllable but refuses resume until rules are upgraded', async () => {
+    BM_legacyTask = true;
+    const BM_snapshot = await BM_manager.BM_bind(BM_file);
+    expect(BM_snapshot.BM_requires_restart).toBe(true);
+    expect(BM_snapshot.BM_deny_contains).toEqual(['/clear']);
+    await BM_manager.BM_action('pause');
+    await expect(BM_manager.BM_action('resume')).rejects.toThrow('旧');
+    expect(BM_routes).not.toContain('/BM/resume');
+  });
   it('accepts desktop selection only from the configured private directory', async () => {
     expect((await BM_manager.BM_bindFromDirectory(BM_file, BM_root)).BM_configured).toBe(true);
     const BM_other = path.join(BM_root, 'BM_other');

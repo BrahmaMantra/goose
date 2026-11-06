@@ -17,6 +17,7 @@ import {
   type BM_WatchAction,
   type BM_Snapshot,
   type BM_Record,
+  BM_defaultReplyMarker,
 } from './BM_types';
 
 function BM_errorCode(BM_error: unknown): string | undefined {
@@ -187,7 +188,8 @@ export class BM_WatchManager {
       BM_counts: {},
       BM_account: '',
       BM_works: [],
-      BM_allow_contains: [],
+      BM_deny_contains: [],
+      BM_reply_marker: BM_defaultReplyMarker,
       BM_max_reply_chars: 0,
       BM_interval_seconds: 30,
     };
@@ -198,19 +200,26 @@ export class BM_WatchManager {
       BM_config_name: path.basename(BM_file),
       BM_account: BM_config.BM_rules.BM_account,
       BM_works: BM_config.BM_rules.BM_works,
-      BM_allow_contains: BM_config.BM_rules.BM_allow_contains,
+      BM_deny_contains: BM_config.BM_rules.BM_deny_contains,
+      BM_reply_marker: BM_config.BM_rules.BM_reply_marker,
       BM_max_reply_chars: BM_config.BM_rules.BM_max_reply_chars,
       BM_interval_seconds: BM_config.BM_interval_seconds,
     });
     try {
       const BM_status = BM_statusSchema.parse(await this.BM_request(BM_config, '/BM/status'));
-      const BM_task = BM_taskSchema.parse(await this.BM_request(BM_config, '/BM/task'));
+      const BM_taskRaw = await this.BM_request(BM_config, '/BM/task');
+      const BM_task = BM_taskSchema.parse(BM_taskRaw);
+      const BM_requires_restart = !(
+        'BM_deny_contains' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
+        'BM_reply_marker' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules
+      );
       return {
         ...BM_base,
         ...BM_status,
         ...BM_task.BM_rules,
         BM_interval_seconds: BM_task.BM_interval_seconds,
         BM_running: true,
+        BM_requires_restart,
       };
     } catch {
       return { ...BM_base, BM_error: '后台未连接；可启动后台或检查私有配置' };
@@ -238,6 +247,8 @@ export class BM_WatchManager {
         }
         throw new Error('后台启动失败，请检查私有日志或端口');
       }
+      if (BM_checked === 'resume' && (await this.BM_snapshot()).BM_requires_restart)
+        throw new Error('后台版本较旧，请先停止并重新启动后台，以使用新的触发规则');
       await this.BM_request(BM_config, `/BM/${BM_checked}`, 'POST');
       if (BM_checked === 'shutdown')
         return {

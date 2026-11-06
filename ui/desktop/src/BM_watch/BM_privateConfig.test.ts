@@ -17,7 +17,7 @@ afterEach(async () => {
   await fs.rm(BM_root, { recursive: true, force: true });
 });
 const BM_account = { BM_display_name: 'BM synthetic name', BM_douyin_id: 'BM_synthetic_id' };
-const BM_input = { BM_works: ['123456789'], BM_allow_contains: [] };
+const BM_input = { BM_works: ['123456789'], BM_deny_contains: [] };
 it('stores isolated private configurations with random tokens and native model fallback', async () => {
   const BM_a = await BM_saveConfig(path.join(BM_root, 'BM_a'), null, BM_account, BM_input);
   const BM_b = await BM_saveConfig(path.join(BM_root, 'BM_b'), BM_root, BM_account, BM_input);
@@ -72,10 +72,10 @@ it('copies legacy configs once without changing tokens, paths, bindings or later
   expect(await fs.readFile(BM_new, 'utf8')).toBe(BM_contents);
   expect(await fs.readFile(BM_old, 'utf8')).toBe(BM_contents);
   const BM_changed = JSON.parse(BM_contents);
-  BM_changed.BM_rules.BM_allow_contains = ['BM edited rule'];
+  BM_changed.BM_rules.BM_deny_contains = ['BM edited rule'];
   await fs.writeFile(BM_new, JSON.stringify(BM_changed));
   await BM_flattenConfigs(BM_root);
-  expect(JSON.parse(await fs.readFile(BM_new, 'utf8')).BM_rules.BM_allow_contains).toEqual([
+  expect(JSON.parse(await fs.readFile(BM_new, 'utf8')).BM_rules.BM_deny_contains).toEqual([
     'BM edited rule',
   ]);
 });

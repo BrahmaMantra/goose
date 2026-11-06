@@ -13,8 +13,9 @@ beforeEach(() => {
     BM_pid: 123,
     BM_account: 'BM_owner',
     BM_works: ['BM_work'],
-    BM_allow_contains: ['question'],
+    BM_deny_contains: ['question'],
     BM_max_reply_chars: 200,
+    BM_reply_marker: '【from deepseek】',
     BM_interval_seconds: 30,
   };
   Object.assign(window.electron, {

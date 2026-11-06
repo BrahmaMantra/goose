@@ -12,14 +12,50 @@ export const BM_statusNames = [
   'accepted',
   'unknown',
 ] as const;
-export const BM_rulesSchema = z
-  .object({
-    BM_account: z.string().min(1),
-    BM_works: z.array(z.string().min(1)).min(1),
-    BM_allow_contains: z.array(z.string().min(1)),
-    BM_max_reply_chars: z.number().int().min(1).max(1000),
-  })
-  .strict();
+export const BM_defaultReplyMarker = '【from deepseek】';
+export const BM_replyMarkerSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(120)
+  .refine(
+    (BM_value) =>
+      BM_value.startsWith('【') &&
+      BM_value.endsWith('】') &&
+      BM_value.slice(1, -1).trim().length > 0 &&
+      !Array.from(BM_value).some((BM_char) => {
+        const BM_code = BM_char.codePointAt(0)!;
+        return BM_code < 32 || (BM_code >= 127 && BM_code <= 159);
+      })
+  );
+export function BM_legacyRules(BM_value: unknown): unknown {
+  if (
+    BM_value &&
+    typeof BM_value === 'object' &&
+    !Array.isArray(BM_value) &&
+    'BM_allow_contains' in BM_value &&
+    !('BM_deny_contains' in BM_value)
+  ) {
+    const { BM_allow_contains, ...BM_rest } = BM_value;
+    return { ...BM_rest, BM_deny_contains: BM_allow_contains };
+  }
+  return BM_value;
+}
+export const BM_rulesSchema = z.preprocess(
+  BM_legacyRules,
+  z
+    .object({
+      BM_account: z.string().min(1),
+      BM_works: z.array(z.string().min(1)).min(1),
+      BM_deny_contains: z.array(z.string().min(1)).default([]),
+      BM_max_reply_chars: z.number().int().min(1).max(1000),
+      BM_reply_marker: BM_replyMarkerSchema.default(BM_defaultReplyMarker),
+    })
+    .strict()
+    .refine(
+      (BM_rules) => Array.from(BM_rules.BM_reply_marker).length + 1 < BM_rules.BM_max_reply_chars
+    )
+);
 export const BM_taskSchema = z
   .object({ BM_rules: BM_rulesSchema, BM_interval_seconds: z.number().int().positive() })
   .strict();
@@ -47,6 +83,7 @@ export const BM_recordSchema = z
         BM_comment: z.string(),
         BM_author: z.string(),
         BM_text: z.string(),
+        BM_is_ai_reply: z.boolean().default(false),
       })
       .strict(),
     BM_reply: z.string().nullable(),
@@ -63,7 +100,9 @@ export interface BM_Snapshot {
   BM_pid?: number;
   BM_account: string;
   BM_works: string[];
-  BM_allow_contains: string[];
+  BM_deny_contains: string[];
+  BM_reply_marker: string;
+  BM_requires_restart?: boolean;
   BM_max_reply_chars: number;
   BM_interval_seconds: number;
   BM_error?: string;

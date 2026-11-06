@@ -10,7 +10,8 @@
   "BM_rules": {
     "BM_account": "BM_example_owner",
     "BM_works": ["BM_example_work"],
-    "BM_allow_contains": [],
-    "BM_max_reply_chars": 200
+    "BM_deny_contains": [],
+    "BM_max_reply_chars": 200,
+    "BM_reply_marker": "【from deepseek】"
   }
 }

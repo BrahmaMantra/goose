@@ -5,6 +5,7 @@ import type { BM_Snapshot } from './BM_types';
 import { BM_loginMessages } from './BM_loginStatus';
 import { BM_worksMessages, type BM_Work, type BM_WorksAction } from './BM_works';
 import BM_WorkPicker from './BM_WorkPicker';
+import { BM_defaultReplyMarker } from './BM_types';
 
 export default function BM_CreateConfigView({
   BM_onSaved,
@@ -22,6 +23,7 @@ export default function BM_CreateConfigView({
   const [BM_workLoading, BM_setWorkLoading] = useState(false);
   const [BM_worksLoaded, BM_setWorksLoaded] = useState(false);
   const [BM_keywords, BM_setKeywords] = useState('');
+  const [BM_replyMarker, BM_setReplyMarker] = useState(BM_defaultReplyMarker);
   const [BM_error, BM_setError] = useState('');
   const [BM_opened, BM_setOpened] = useState(false);
   const [BM_loginAction, BM_setLoginAction] = useState<'open' | 'confirm' | null>(null);
@@ -105,13 +107,14 @@ export default function BM_CreateConfigView({
       }
       const BM_snapshot = await window.electron.BM_watchCreateConfig({
         BM_works: BM_ids,
-        BM_allow_contains: BM_keywords.split(/\n/)
+        BM_deny_contains: BM_keywords.split(/\n/)
           .map((BM_value) => BM_value.trim())
           .filter(Boolean),
+        BM_reply_marker: BM_replyMarker,
       });
       BM_onSaved(BM_snapshot);
     } catch {
-      BM_setError('保存未完成，请检查勾选的作品、私有目录权限，并确认扫码窗口仍使用同一账号。');
+      BM_setError('保存未完成，请检查勾选的作品、AI 标记格式、私有目录权限，并确认扫码窗口仍使用同一账号。');
     } finally {
       BM_setBusy(false);
     }
@@ -206,12 +209,21 @@ export default function BM_CreateConfigView({
         </section>
       )}
       <label className="block space-y-2 text-sm">
-        <span>自动处理关键词（每行一个，可留空）</span>
+        <span>拒绝词（每行一个，命中就跳过，可留空）</span>
         <textarea
           className="w-full rounded-lg border border-border-primary bg-background-primary p-3"
           rows={2}
           value={BM_keywords}
           onChange={(BM_event) => BM_setKeywords(BM_event.target.value)}
+          disabled={BM_busy}
+        />
+      </label>
+      <label className="block space-y-2 text-sm">
+        <span>AI 回复标记（包含【】；会计入回复总长度）</span>
+        <input
+          className="w-full rounded-lg border border-border-primary bg-background-primary p-3"
+          value={BM_replyMarker}
+          onChange={(BM_event) => BM_setReplyMarker(BM_event.target.value)}
           disabled={BM_busy}
         />
       </label>

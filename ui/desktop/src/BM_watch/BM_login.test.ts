@@ -130,7 +130,7 @@ it('isolates a sandboxed official login window and persists only after confirmed
   expect((await BM_login.BM_works(BM_owner, 'refresh')).BM_status).toBe('ready');
   const BM_file = await BM_login.BM_save(BM_owner, null, {
     BM_works: ['123456789'],
-    BM_allow_contains: [],
+    BM_deny_contains: [],
   });
   expect(JSON.parse(await fs.readFile(BM_file, 'utf8')).BM_rules.BM_account).toBe('BM_id');
   expect(BM_session.cookies.flushStore).toHaveBeenCalled();
@@ -150,7 +150,7 @@ it('rejects another renderer and clears authentication when creation is cancelle
     (BM_fake.BM_sessions[0] as { clearStorageData: ReturnType<typeof vi.fn> }).clearStorageData
   ).toHaveBeenCalled();
   await expect(
-    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
+    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_deny_contains: [] })
   ).rejects.toThrow();
 });
 it('queues cancellation while the login window is still opening', async () => {
@@ -168,14 +168,14 @@ it('retains observed works across more loads and refuses unobserved IDs or switc
   await BM_login.BM_open(BM_owner, BM_root);
   await BM_login.BM_confirm(BM_owner);
   await expect(
-    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
+    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_deny_contains: [] })
   ).rejects.toThrow();
   const BM_first = await BM_login.BM_works(BM_owner, 'refresh');
   const BM_more = await BM_login.BM_works(BM_owner, 'more');
   expect(BM_first).toMatchObject({ BM_status: 'ready', BM_complete: false });
   expect(BM_more.BM_status === 'ready' && BM_more.BM_items.length).toBe(24);
   await expect(
-    BM_login.BM_save(BM_owner, null, { BM_works: ['999999999'], BM_allow_contains: [] })
+    BM_login.BM_save(BM_owner, null, { BM_works: ['999999999'], BM_deny_contains: [] })
   ).rejects.toThrow();
   const BM_window = BM_fake.BM_windows[0] as BrowserWindow;
   vi.mocked(BM_window.webContents.executeJavaScript).mockResolvedValue({
@@ -198,7 +198,7 @@ it('rejects switched accounts and does not expose page exceptions', async () => 
     BM_account: { BM_display_name: 'BM other', BM_douyin_id: 'BM_other' },
   });
   await expect(
-    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
+    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_deny_contains: [] })
   ).rejects.toThrow();
   vi.mocked(BM_window.webContents.executeJavaScript).mockRejectedValue(
     new Error('BM secret page exception')
@@ -222,7 +222,7 @@ it('reports a missing header without leaking an earlier observed account', async
     BM_code: 'BM_account_header_missing',
   });
   await expect(
-    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
+    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_deny_contains: [] })
   ).rejects.toThrow();
 });
 it('bounds a stuck page read and releases the cancellation queue', async () => {

@@ -18,8 +18,15 @@ pub struct BM_Decision {
 pub struct BM_Rules {
     pub BM_account: String,
     pub BM_works: Vec<String>,
-    pub BM_allow_contains: Vec<String>,
+    #[serde(default, alias = "BM_allow_contains")]
+    pub BM_deny_contains: Vec<String>,
     pub BM_max_reply_chars: usize,
+    #[serde(default = "BM_default_reply_marker")]
+    pub BM_reply_marker: String,
+}
+
+pub fn BM_default_reply_marker() -> String {
+    "【from deepseek】".into()
 }
 
 impl BM_Rules {
@@ -35,15 +42,33 @@ impl BM_Rules {
             "invalid reply length"
         );
         ensure!(
-            self.BM_allow_contains
+            self.BM_deny_contains
                 .iter()
                 .all(|BM_x| !BM_x.trim().is_empty()),
             "empty rule is not allowed"
+        );
+        ensure!(
+            self.BM_reply_marker.starts_with('【')
+                && self.BM_reply_marker.ends_with('】')
+                && !self.BM_reply_marker[3..self.BM_reply_marker.len() - 3]
+                    .trim()
+                    .is_empty()
+                && !self.BM_reply_marker.chars().any(char::is_control)
+                && self.BM_reply_marker.chars().count() <= 120
+                && self.BM_reply_marker.chars().count() + 1 < self.BM_max_reply_chars,
+            "invalid reply marker or reply length budget"
         );
         Ok(())
     }
     pub fn BM_target(&self, BM_message: &BM_Comment) -> bool {
         BM_message.BM_account == self.BM_account && self.BM_works.contains(&BM_message.BM_work)
+    }
+    pub fn BM_mark_reply(&self, BM_text: &str) -> String {
+        let BM_text = BM_text.trim();
+        if BM_text.is_empty() || BM_text.starts_with(&self.BM_reply_marker) {
+            return BM_text.into();
+        }
+        format!("{} {}", self.BM_reply_marker, BM_text)
     }
 }
 
@@ -90,19 +115,25 @@ impl BM_Worker {
                 break;
             };
             BM_processed += 1;
-            if !self.BM_rules.BM_target(&BM_message)
-                || BM_message.BM_author == self.BM_rules.BM_account
-            {
+            let BM_own_ai = BM_message.BM_author == self.BM_rules.BM_account
+                && (BM_message.BM_is_ai_reply
+                    || BM_message
+                        .BM_text
+                        .trim_start()
+                        .starts_with(&self.BM_rules.BM_reply_marker)
+                    || self.BM_store.BM_is_recorded_reply(&BM_message).await?);
+            if !self.BM_rules.BM_target(&BM_message) || BM_own_ai {
                 self.BM_store.BM_finish(BM_id, "skipped", None).await?;
                 continue;
             }
-            if !self
+            let BM_text_lower = BM_message.BM_text.to_lowercase();
+            if self
                 .BM_rules
-                .BM_allow_contains
+                .BM_deny_contains
                 .iter()
-                .any(|BM_rule| BM_message.BM_text.contains(BM_rule))
+                .any(|BM_rule| BM_text_lower.contains(&BM_rule.to_lowercase()))
             {
-                self.BM_store.BM_finish(BM_id, "review", None).await?;
+                self.BM_store.BM_finish(BM_id, "skipped", None).await?;
                 continue;
             }
             let BM_generation = self.BM_store.BM_generation().await?;
@@ -121,13 +152,14 @@ impl BM_Worker {
                     continue;
                 }
             };
+            let BM_reply = self.BM_rules.BM_mark_reply(&BM_decision.BM_text);
             if !self.BM_platform.BM_write_ready()
                 || !BM_decision.BM_send
-                || BM_decision.BM_text.trim().is_empty()
-                || BM_decision.BM_text.chars().count() > self.BM_rules.BM_max_reply_chars
+                || BM_reply.is_empty()
+                || BM_reply.chars().count() > self.BM_rules.BM_max_reply_chars
             {
                 self.BM_store
-                    .BM_finish(BM_id, "review", Some(&BM_decision.BM_text))
+                    .BM_finish(BM_id, "review", Some(&BM_reply))
                     .await?;
                 continue;
             }
@@ -137,17 +169,17 @@ impl BM_Worker {
                 || self.BM_store.BM_generation().await? != BM_generation
             {
                 self.BM_store
-                    .BM_finish(BM_id, "queued", Some(&BM_decision.BM_text))
+                    .BM_finish(BM_id, "queued", Some(&BM_reply))
                     .await?;
                 break;
             }
             self.BM_store
-                .BM_finish(BM_id, "sending", Some(&BM_decision.BM_text))
+                .BM_finish(BM_id, "sending", Some(&BM_reply))
                 .await?;
             // All submission failures are conservatively unknown; never retry blindly.
             let BM_status = if self
                 .BM_platform
-                .BM_submit(&BM_message, &BM_decision.BM_text)
+                .BM_submit(&BM_message, &BM_reply)
                 .await
                 .is_ok()
             {

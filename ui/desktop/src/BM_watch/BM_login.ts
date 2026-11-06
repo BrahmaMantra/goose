@@ -49,11 +49,29 @@ export const BM_readAccountScript = `(() => {
   }
   if (BM_labels.length !== 1) return BM_fail('BM_account_header_ambiguous');
   const BM_label = BM_labels[0];
-  let BM_parent = BM_label.parentElement;
-  for (let BM_level = 0; BM_level < 2 && BM_parent && BM_parent.tagName !== 'MAIN'; BM_level++, BM_parent = BM_parent.parentElement) {
+  // Official home component: header > left > name (div, or span inside account-trigger).
+  // Match CSS module field prefixes, not version-specific hashes or arbitrary nearby text.
+  const BM_class = (BM_el, BM_field) => [...BM_el.classList].some(BM_token =>
+    BM_token === BM_field || BM_token.startsWith(BM_field + '-'));
+  let BM_idRegion = BM_label;
+  for (let BM_level = 0; BM_level < 3 && BM_idRegion; BM_level++, BM_idRegion = BM_idRegion.parentElement) {
+    if (!BM_class(BM_idRegion, 'unique_id')) continue;
+    const BM_header = BM_idRegion.parentElement;
+    if (!BM_header || !BM_class(BM_header, 'header')) return BM_fail('BM_account_name_missing');
+    const BM_left = [...BM_header.children].filter(BM_el => BM_class(BM_el, 'left'));
+    if (BM_left.length !== 1) return BM_fail('BM_account_name_missing');
+    const BM_names = [...BM_left[0].querySelectorAll('*')].filter(BM_el =>
+      BM_class(BM_el, 'name') && BM_visible(BM_el) && BM_text(BM_el));
+    if (BM_names.length !== 1) return BM_fail('BM_account_name_missing');
+    return {BM_status:'authenticated', BM_account:{
+      BM_display_name: BM_text(BM_names[0]),
+      BM_douyin_id: BM_text(BM_label).replace(/^抖音号[：:]\\s*/, '').trim()}};
+  }
+  // Retain the previously verified direct-parent nickname button layout.
+  const BM_parent = BM_label.parentElement;
+  if (BM_parent && BM_parent.tagName !== 'MAIN') {
     const BM_buttons = [...BM_parent.querySelectorAll('button,[role="button"]')].filter(BM_el =>
       BM_visible(BM_el) && BM_text(BM_el));
-    if (BM_buttons.length > 1) break;
     if (BM_buttons.length === 1) return {BM_status:'authenticated', BM_account:{
       BM_display_name: BM_text(BM_buttons[0]),
       BM_douyin_id: BM_text(BM_label).replace(/^抖音号[：:]\\s*/, '').trim()}};

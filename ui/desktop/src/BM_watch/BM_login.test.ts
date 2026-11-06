@@ -204,7 +204,7 @@ it('extracts only a visible unambiguous official account header', () => {
     BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
   });
   document.body.innerHTML =
-    '<main><section><button>BM nickname</button><div><span>抖音号：<strong>BM_id</strong><svg><path /></svg></span></div></section></main>';
+    '<main><div class=header-BM_test><div class=left-BM_test><div class=name-BM_test>BM nickname</div></div><div class=unique_id-BM_test><span>抖音号：<strong>BM_id</strong><svg><path /></svg></span></div></div></main>';
   expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
     BM_status: 'authenticated',
     BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
@@ -226,4 +226,42 @@ it('extracts only a visible unambiguous official account header', () => {
   ])
     expect(BM_allowedLoginUrl(BM_url)).toBe(false);
   expect(BM_allowedLoginUrl('https://creator.douyin.com/')).toBe(true);
+});
+it('reads both official homepage name layouts without treating action buttons as a nickname', () => {
+  vi.spyOn(Element.prototype, 'getClientRects').mockReturnValue([{}] as unknown as ReturnType<
+    Element['getClientRects']
+  >);
+  const BM_read = new Function(
+    'location',
+    'document',
+    'getComputedStyle',
+    `return ${BM_readAccountScript}`
+  );
+  const BM_location = { origin: 'https://creator.douyin.com', pathname: '/creator-micro/home' };
+  try {
+    for (const BM_nameMarkup of [
+      '<div class="name-BM_example">BM nickname</div>',
+      '<button class="account-trigger-BM_example"><span class="name-BM_example">BM nickname</span><span aria-hidden="true"><svg /></span></button>',
+    ]) {
+      document.body.innerHTML = `<main><div class="header-BM_example"><div class="left-BM_example">${BM_nameMarkup}<button>BM other action</button></div><div class="unique_id-BM_example">抖音号：BM_id</div><button>BM unrelated action</button></div></main>`;
+      expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
+        BM_status: 'authenticated',
+        BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
+      });
+    }
+    document
+      .querySelector('[class^="left-"]')
+      ?.insertAdjacentHTML('beforeend', '<div class="name-BM_duplicate">BM other nickname</div>');
+    expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
+      BM_status: 'failed',
+      BM_code: 'BM_account_name_missing',
+    });
+    document.querySelectorAll('[class^="name-"]').forEach((BM_el) => BM_el.remove());
+    expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
+      BM_status: 'failed',
+      BM_code: 'BM_account_name_missing',
+    });
+  } finally {
+    vi.restoreAllMocks();
+  }
 });

@@ -35,6 +35,7 @@ beforeEach(() => {
       BM_confirm = vi.fn();
       BM_cancel = vi.fn();
       BM_save = BM_loginSave;
+      BM_works = vi.fn();
     },
   }));
 });
@@ -63,6 +64,9 @@ it('rejects untrusted login and config creation before opening a browser or writ
   });
   await expect(BM_handlers.get('BM-watch:login')?.({}, 'open')).rejects.toThrow('untrusted frame');
   await expect(BM_handlers.get('BM-watch:create')?.({}, {})).rejects.toThrow('untrusted frame');
+  await expect(BM_handlers.get('BM-watch:works')?.({}, 'refresh')).rejects.toThrow(
+    'untrusted frame'
+  );
   expect(BM_loginOpen).not.toHaveBeenCalled();
   expect(BM_loginSave).not.toHaveBeenCalled();
 });

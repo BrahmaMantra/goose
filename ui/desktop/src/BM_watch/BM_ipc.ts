@@ -7,6 +7,7 @@ import type { BM_WatchAction } from './BM_types';
 import { BM_Login } from './BM_login';
 import { BM_createSchema, BM_defaultPrivateRoot } from './BM_privateConfig';
 import { z } from 'zod';
+import { BM_worksActionSchema } from './BM_works';
 
 export function BM_registerWatchIpc(
   BM_requireWindow: (BM_event: IpcMainInvokeEvent) => BrowserWindow
@@ -57,6 +58,12 @@ export function BM_registerWatchIpc(
     if ((await BM_manager.BM_snapshot()).BM_running) throw new Error('请先停止后台，再创建配置');
     const BM_file = await BM_login.BM_save(BM_window, BM_gooseRoot, BM_checked);
     return BM_manager.BM_bind(BM_file);
+  });
+  ipcMain.handle('BM-watch:works', async (BM_event, BM_action: unknown) => {
+    const BM_window = BM_requireWindow(BM_event);
+    const BM_checked = BM_worksActionSchema.parse(BM_action);
+    if ((await BM_manager.BM_snapshot()).BM_running) throw new Error('请先停止后台，再选择作品');
+    return BM_login.BM_works(BM_window, BM_checked);
   });
   ipcMain.handle('BM-watch:snapshot', (BM_event) => {
     BM_requireWindow(BM_event);

@@ -106,6 +106,9 @@ type ElectronAPI = {
   BM_watchCreateConfig: (
     BM_input: import('./BM_watch/BM_privateConfig').BM_CreateConfig
   ) => Promise<BM_Snapshot>;
+  BM_watchListWorks: (
+    BM_action: import('./BM_watch/BM_works').BM_WorksAction
+  ) => Promise<import('./BM_watch/BM_works').BM_WorksResult>;
   BM_watchSnapshot: () => Promise<BM_Snapshot>;
   BM_watchAction: (BM_action: BM_WatchAction) => Promise<BM_Snapshot>;
   BM_watchRecords: (BM_before?: number) => Promise<BM_Record[]>;
@@ -206,6 +209,7 @@ const electronAPI: ElectronAPI = {
   BM_watchSelectConfig: () => ipcRenderer.invoke('BM-watch:select'),
   BM_watchLogin: (BM_action) => ipcRenderer.invoke('BM-watch:login', BM_action),
   BM_watchCreateConfig: (BM_input) => ipcRenderer.invoke('BM-watch:create', BM_input),
+  BM_watchListWorks: (BM_action) => ipcRenderer.invoke('BM-watch:works', BM_action),
   BM_watchSnapshot: () => ipcRenderer.invoke('BM-watch:snapshot'),
   BM_watchAction: (BM_action) => ipcRenderer.invoke('BM-watch:action', BM_action),
   BM_watchRecords: (BM_before) => ipcRenderer.invoke('BM-watch:records', BM_before),

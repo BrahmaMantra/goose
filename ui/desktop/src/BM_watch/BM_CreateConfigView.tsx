@@ -3,33 +3,8 @@ import { Button } from '../components/ui/button';
 import type { BM_Account } from './BM_privateConfig';
 import type { BM_Snapshot } from './BM_types';
 import { BM_loginMessages } from './BM_loginStatus';
-
-export function BM_parseWorks(BM_text: string): string[] {
-  return [
-    ...new Set(
-      BM_text.split(/[\s,，]+/)
-        .filter(Boolean)
-        .map((BM_value) => {
-          if (/^\d{5,30}$/.test(BM_value)) return BM_value;
-          try {
-            const BM_url = new URL(BM_value);
-            if (
-              BM_url.protocol === 'https:' &&
-              ['www.douyin.com', 'douyin.com'].includes(BM_url.hostname)
-            ) {
-              const BM_id = /^\/video\/(\d{5,30})\/?$/.exec(BM_url.pathname)?.[1];
-              if (BM_id) return BM_id;
-            }
-          } catch {
-            /* Invalid links are reported together below. */
-          }
-          throw new Error(
-            '请填写作品 ID 或完整的 https://www.douyin.com/video/… 链接，暂不支持短链接'
-          );
-        })
-    ),
-  ];
-}
+import { BM_worksMessages, type BM_Work, type BM_WorksAction } from './BM_works';
+import BM_WorkPicker from './BM_WorkPicker';
 
 export default function BM_CreateConfigView({
   BM_onSaved,
@@ -40,7 +15,12 @@ export default function BM_CreateConfigView({
 }) {
   const [BM_account, BM_setAccount] = useState<BM_Account | null>(null);
   const [BM_busy, BM_setBusy] = useState(false);
-  const [BM_works, BM_setWorks] = useState('');
+  const [BM_works, BM_setWorks] = useState<BM_Work[]>([]);
+  const [BM_selected, BM_setSelected] = useState<string[]>([]);
+  const [BM_order, BM_setOrder] = useState('');
+  const [BM_more, BM_setMore] = useState(false);
+  const [BM_workLoading, BM_setWorkLoading] = useState(false);
+  const [BM_worksLoaded, BM_setWorksLoaded] = useState(false);
   const [BM_keywords, BM_setKeywords] = useState('');
   const [BM_error, BM_setError] = useState('');
   const [BM_opened, BM_setOpened] = useState(false);
@@ -51,6 +31,37 @@ export default function BM_CreateConfigView({
     },
     []
   );
+  const BM_loadWorks = async (BM_action: BM_WorksAction) => {
+    BM_setBusy(true);
+    BM_setWorkLoading(true);
+    BM_setError('');
+    if (BM_action === 'refresh') {
+      BM_setWorks([]);
+      BM_setSelected([]);
+      BM_setWorksLoaded(false);
+    }
+    try {
+      const BM_result = await window.electron.BM_watchListWorks(BM_action);
+      if (BM_result.BM_status === 'failed') {
+        BM_setError(BM_worksMessages[BM_result.BM_code]);
+        if (BM_result.BM_code === 'BM_works_login_changed') {
+          BM_setAccount(null);
+          BM_setWorks([]);
+          BM_setSelected([]);
+        }
+        return;
+      }
+      BM_setWorks(BM_result.BM_items);
+      BM_setOrder(BM_result.BM_order_text);
+      BM_setMore(BM_result.BM_can_load_more);
+      BM_setWorksLoaded(true);
+    } catch {
+      BM_setError('无法读取作品列表，请重新确认扫码账号后重试。');
+    } finally {
+      BM_setBusy(false);
+      BM_setWorkLoading(false);
+    }
+  };
   const BM_login = async (BM_action: 'open' | 'confirm') => {
     BM_setBusy(true);
     BM_setLoginAction(BM_action);
@@ -65,6 +76,13 @@ export default function BM_CreateConfigView({
       }
       BM_setOpened(true);
       BM_setAccount(BM_result.BM_account ?? null);
+      BM_setWorks([]);
+      BM_setSelected([]);
+      BM_setWorksLoaded(false);
+      if (BM_result.BM_status === 'authenticated') {
+        BM_setLoginAction(null);
+        await BM_loadWorks('refresh');
+      }
     } catch {
       BM_setError(
         BM_action === 'open'
@@ -80,7 +98,7 @@ export default function BM_CreateConfigView({
     BM_setBusy(true);
     BM_setError('');
     try {
-      const BM_ids = BM_parseWorks(BM_works);
+      const BM_ids = BM_selected;
       if (!BM_ids.length) {
         BM_setError('请至少填写一条自己的作品。');
         return;
@@ -93,7 +111,7 @@ export default function BM_CreateConfigView({
       });
       BM_onSaved(BM_snapshot);
     } catch {
-      BM_setError('保存未完成，请检查作品链接、私有目录权限，并确认扫码窗口仍停留在同一账号首页。');
+      BM_setError('保存未完成，请检查勾选的作品、私有目录权限，并确认扫码窗口仍使用同一账号。');
     } finally {
       BM_setBusy(false);
     }
@@ -141,17 +159,52 @@ export default function BM_CreateConfigView({
           已确认：{BM_account.BM_display_name}（抖音号：{BM_account.BM_douyin_id}）
         </p>
       )}
-      <label className="block space-y-2 text-sm">
-        <span>自己的作品链接或 ID（多条用换行分隔）</span>
-        <textarea
-          className="w-full rounded-lg border border-border-primary bg-background-primary p-3"
-          rows={3}
-          value={BM_works}
-          onChange={(BM_event) => BM_setWorks(BM_event.target.value)}
-          placeholder="https://www.douyin.com/video/…"
-          disabled={BM_busy}
-        />
-      </label>
+      {BM_account && (
+        <section className="space-y-3" aria-label="作品列表">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-medium">选择自己的作品</h3>
+            <Button
+              variant="outline"
+              disabled={BM_busy}
+              onClick={() => {
+                void BM_loadWorks('refresh');
+              }}
+            >
+              刷新作品列表
+            </Button>
+            <Button
+              variant="outline"
+              disabled={BM_busy || !BM_worksLoaded || !BM_more}
+              onClick={() => {
+                void BM_loadWorks('more');
+              }}
+            >
+              加载更多作品
+            </Button>
+          </div>
+          <p className="text-sm text-text-secondary">
+            {BM_order || '沿用官方页面顺序'} · 已选择 {BM_selected.length} 条
+          </p>
+          {BM_workLoading && (
+            <p role="status" className="text-sm">
+              正在读取官方作品列表，请稍候…
+            </p>
+          )}
+          {BM_worksLoaded && !BM_works.length && (
+            <p className="text-sm">当前未读取到作品，可刷新重试。</p>
+          )}
+          <BM_WorkPicker
+            BM_items={BM_works}
+            BM_selected={BM_selected}
+            BM_onChange={BM_setSelected}
+            BM_busy={BM_busy}
+          />
+          <p className="text-sm text-text-secondary">
+            仅展示当前读取的作品，按官方页面顺序排列；置顶标记不改变排列顺序。点击加载更多继续读取，最多展示
+            100 条。
+          </p>
+        </section>
+      )}
       <label className="block space-y-2 text-sm">
         <span>自动处理关键词（每行一个，可留空）</span>
         <textarea
@@ -164,11 +217,11 @@ export default function BM_CreateConfigView({
       </label>
       <p className="text-sm text-text-secondary">
         保存后绑定此配置，后台保持未启动。扫码登录不授予开放平台 API
-        权限，作品归属将在真实平台接入时校验。
+        权限；只能保存当前扫码账号已读取并勾选的作品。
       </p>
       <div className="flex gap-2">
         <Button
-          disabled={BM_busy || !BM_account || !BM_works.trim()}
+          disabled={BM_busy || !BM_account || !BM_selected.length}
           onClick={() => {
             void BM_save();
           }}

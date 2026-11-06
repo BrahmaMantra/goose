@@ -2,6 +2,16 @@ import { BrowserWindow, session } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { BM_loginMessages, type BM_LoginCode, type BM_LoginResult } from './BM_loginStatus';
+import {
+  BM_readWorksScript,
+  BM_scrollWorksScript,
+  BM_clickWorkScript,
+  BM_workDetailId,
+  BM_worksObservationSchema,
+  type BM_Work,
+  type BM_WorksAction,
+  type BM_WorksResult,
+} from './BM_works';
 export type { BM_LoginResult } from './BM_loginStatus';
 import {
   BM_accountSchema,
@@ -105,7 +115,10 @@ export class BM_Login {
     BM_owner: number;
     BM_dir: string;
     BM_account?: BM_Account;
+    BM_works?: Map<string, BM_Work>;
+    BM_workTarget?: number;
   };
+  private BM_detailCapture?: (BM_id: string) => void;
   private BM_operation: Promise<unknown> = Promise.resolve();
 
   private BM_serial<T>(BM_work: () => Promise<T>): Promise<T> {
@@ -164,7 +177,16 @@ export class BM_Login {
       };
       BM_owner.once('closed', BM_ownerClosed);
       BM_window.once('closed', () => BM_owner.removeListener('closed', BM_ownerClosed));
-      BM_window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      BM_window.webContents.setWindowOpenHandler((BM_details) => {
+        const BM_id = BM_workDetailId(BM_details.url);
+        if (
+          BM_id &&
+          BM_window.webContents.getURL() ===
+            'https://creator.douyin.com/creator-micro/content/manage'
+        )
+          this.BM_detailCapture?.(BM_id);
+        return { action: 'deny' };
+      });
       BM_window.webContents.on('will-navigate', (BM_navigation) => {
         if (!BM_allowedLoginUrl(BM_navigation.url)) BM_navigation.preventDefault();
       });
@@ -214,6 +236,8 @@ export class BM_Login {
       try {
         const BM_value = this.BM_owned(BM_owner);
         BM_value.BM_account = undefined;
+        BM_value.BM_works = undefined;
+        BM_value.BM_workTarget = undefined;
         BM_value.BM_account = await this.BM_observe(BM_value.BM_window);
         console.info('[BM_watch] login confirm: authenticated');
         return { BM_status: 'authenticated', BM_account: BM_value.BM_account };
@@ -225,6 +249,104 @@ export class BM_Login {
       }
     });
   }
+  private async BM_homeAccount(BM_window: BrowserWindow): Promise<BM_Account> {
+    if (BM_window.webContents.getURL() !== BM_creatorUrl)
+      await BM_withReadTimeout(BM_window.loadURL(BM_creatorUrl));
+    const BM_until = Date.now() + 6000;
+    while (true) {
+      try {
+        return await this.BM_observe(BM_window);
+      } catch (BM_error) {
+        if (!(BM_error instanceof BM_LoginError) || Date.now() >= BM_until) throw BM_error;
+        await new Promise((BM_resolve) => setTimeout(BM_resolve, 200));
+      }
+    }
+  }
+  private async BM_cardId(BM_window: BrowserWindow, BM_item: BM_Work): Promise<string | null> {
+    let BM_timer: ReturnType<typeof setTimeout> | undefined;
+    const BM_capture = new Promise<string | null>((BM_resolve) => {
+      this.BM_detailCapture = BM_resolve;
+      BM_timer = setTimeout(() => BM_resolve(null), 1200);
+    });
+    try {
+      const BM_clicked = await BM_withReadTimeout(
+        BM_window.webContents.executeJavaScript(BM_clickWorkScript(BM_item), true)
+      );
+      return BM_clicked ? await BM_capture : null;
+    } finally {
+      this.BM_detailCapture = undefined;
+      if (BM_timer) clearTimeout(BM_timer);
+    }
+  }
+  async BM_works(BM_owner: BrowserWindow, BM_action: BM_WorksAction): Promise<BM_WorksResult> {
+    return this.BM_serial(async () => {
+      try {
+        const BM_value = this.BM_owned(BM_owner);
+        const BM_expected = BM_value.BM_account;
+        if (!BM_expected) return { BM_status: 'failed', BM_code: 'BM_works_login_changed' };
+        const BM_account = await this.BM_homeAccount(BM_value.BM_window);
+        if (BM_account.BM_douyin_id !== BM_expected.BM_douyin_id)
+          return { BM_status: 'failed', BM_code: 'BM_works_login_changed' };
+        const BM_target =
+          BM_action === 'refresh' ? 12 : Math.min((BM_value.BM_workTarget ?? 0) + 12, 100);
+        await BM_withReadTimeout(
+          BM_value.BM_window.loadURL('https://creator.douyin.com/creator-micro/content/manage')
+        );
+        const BM_until = Date.now() + 8000;
+        let BM_observation: ReturnType<typeof BM_worksObservationSchema.parse> | undefined;
+        let BM_previousCount = -1;
+        let BM_stableCount = 0;
+        while (Date.now() < BM_until) {
+          const BM_result = BM_worksObservationSchema.safeParse(
+            await BM_withReadTimeout(
+              BM_value.BM_window.webContents.executeJavaScript(
+                `${BM_readWorksScript}(${BM_target})`
+              )
+            )
+          );
+          if (BM_result.success) {
+            BM_observation = BM_result.data;
+            if (BM_observation.BM_items.length >= BM_target) break;
+            BM_stableCount =
+              BM_observation.BM_items.length === BM_previousCount ? BM_stableCount + 1 : 0;
+            BM_previousCount = BM_observation.BM_items.length;
+            if (BM_previousCount > 0 && BM_stableCount >= 3) break;
+            await BM_withReadTimeout(
+              BM_value.BM_window.webContents.executeJavaScript(BM_scrollWorksScript)
+            );
+          }
+          await new Promise((BM_resolve) => setTimeout(BM_resolve, 400));
+        }
+        if (!BM_observation) return { BM_status: 'failed', BM_code: 'BM_works_not_ready' };
+        const BM_resolveUntil = Date.now() + 8000;
+        for (const BM_item of BM_observation.BM_items) {
+          if (BM_item.BM_disabled) continue;
+          BM_item.BM_id =
+            Date.now() < BM_resolveUntil ? await this.BM_cardId(BM_value.BM_window, BM_item) : null;
+          BM_item.BM_disabled = BM_item.BM_id === null;
+        }
+        const BM_after = await this.BM_homeAccount(BM_value.BM_window);
+        if (BM_after.BM_douyin_id !== BM_expected.BM_douyin_id) {
+          BM_value.BM_works = undefined;
+          return { BM_status: 'failed', BM_code: 'BM_works_login_changed' };
+        }
+        if (BM_action === 'refresh') BM_value.BM_works = new Map();
+        BM_value.BM_works ??= new Map();
+        for (const BM_item of BM_observation.BM_items)
+          if (BM_item.BM_id && !BM_item.BM_disabled) BM_value.BM_works.set(BM_item.BM_id, BM_item);
+        BM_value.BM_workTarget = BM_target;
+        console.info('[BM_watch] works read:', BM_observation.BM_items.length);
+        return {
+          BM_status: 'ready',
+          ...BM_observation,
+          BM_can_load_more: BM_target < 100,
+          BM_complete: false,
+        };
+      } catch {
+        return { BM_status: 'failed', BM_code: 'BM_works_read_failed' };
+      }
+    });
+  }
   async BM_save(
     BM_owner: BrowserWindow,
     BM_gooseRoot: string | null,
@@ -233,7 +355,9 @@ export class BM_Login {
     return this.BM_serial(async () => {
       const BM_value = this.BM_owned(BM_owner);
       if (!BM_value.BM_account) throw new Error('请先确认扫码账号');
-      const BM_account = await this.BM_observe(BM_value.BM_window);
+      if (BM_input.BM_works.some((BM_id) => !BM_value.BM_works?.has(BM_id)))
+        throw new Error('请从当前账号已读取的作品列表选择作品');
+      const BM_account = await this.BM_homeAccount(BM_value.BM_window);
       if (BM_account.BM_douyin_id !== BM_value.BM_account.BM_douyin_id)
         throw new Error('扫码窗口的账号已变化，请重新确认账号');
       await BM_value.BM_window.webContents.session.cookies.flushStore();

@@ -23,6 +23,8 @@ vi.mock('electron', () => ({
   },
   BrowserWindow: class extends EventEmitter {
     BM_destroyed = false;
+    BM_url = 'https://creator.douyin.com/creator-micro/home';
+    BM_openHandler?: (BM_details: { url: string }) => unknown;
     BM_options: unknown;
     webContents: EventEmitter & {
       session: unknown;
@@ -35,12 +37,40 @@ vi.mock('electron', () => ({
       this.BM_options = BM_options;
       this.webContents = Object.assign(new EventEmitter(), {
         session: BM_options.webPreferences.session,
-        getURL: () => 'https://creator.douyin.com/creator-micro/home',
-        executeJavaScript: vi.fn(async () => ({
-          BM_status: 'authenticated',
-          BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
-        })),
-        setWindowOpenHandler: vi.fn(),
+        getURL: () => this.BM_url,
+        executeJavaScript: vi.fn(async (BM_script: string) => {
+          if (BM_script.includes('BM_card.click()')) {
+            const BM_index = Number(/"BM_index":(\d+)/.exec(BM_script)?.[1] ?? 0);
+            this.BM_openHandler?.({
+              url: `https://creator.douyin.com/creator-micro/work-management/work-detail/${123456789 + BM_index}?enter_from=content`,
+            });
+            return true;
+          }
+          if (BM_script.includes('scrollTop')) return true;
+          if (BM_script.includes('const BM_cards'))
+            return {
+              BM_items: Array.from(
+                { length: Number(/(\d+)\)$/.exec(BM_script)?.[1] ?? 12) },
+                (_BM_unused, BM_index) => ({
+                  BM_index,
+                  BM_id: null,
+                  BM_title_text: `BM work ${BM_index}`,
+                  BM_publish_time_text: 'BM time',
+                  BM_status_text: '已发布',
+                  BM_pinned: false,
+                  BM_disabled: false,
+                })
+              ),
+              BM_order_text: '最新发布',
+            };
+          return {
+            BM_status: 'authenticated',
+            BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
+          };
+        }),
+        setWindowOpenHandler: vi.fn((BM_handler: (BM_details: { url: string }) => unknown) => {
+          this.BM_openHandler = BM_handler;
+        }),
       });
       BM_fake.BM_windows.push(this);
     }
@@ -48,7 +78,9 @@ vi.mock('electron', () => ({
       return this.BM_destroyed;
     }
     show() {}
-    async loadURL() {}
+    async loadURL(BM_url: string) {
+      this.BM_url = BM_url;
+    }
     close() {
       this.BM_destroyed = true;
       this.emit('closed');
@@ -95,6 +127,7 @@ it('isolates a sandboxed official login window and persists only after confirmed
   expect(BM_fake.BM_windows).toHaveLength(1);
   const BM_result = await BM_login.BM_confirm(BM_owner);
   expect(JSON.stringify(BM_result)).not.toContain(BM_root);
+  expect((await BM_login.BM_works(BM_owner, 'refresh')).BM_status).toBe('ready');
   const BM_file = await BM_login.BM_save(BM_owner, null, {
     BM_works: ['123456789'],
     BM_allow_contains: [],
@@ -130,10 +163,35 @@ it('queues cancellation while the login window is still opening', async () => {
     (BM_fake.BM_sessions[0] as { clearStorageData: ReturnType<typeof vi.fn> }).clearStorageData
   ).toHaveBeenCalled();
 });
+it('retains observed works across more loads and refuses unobserved IDs or switched owners', async () => {
+  const BM_login = new BM_Login();
+  await BM_login.BM_open(BM_owner, BM_root);
+  await BM_login.BM_confirm(BM_owner);
+  await expect(
+    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
+  ).rejects.toThrow();
+  const BM_first = await BM_login.BM_works(BM_owner, 'refresh');
+  const BM_more = await BM_login.BM_works(BM_owner, 'more');
+  expect(BM_first).toMatchObject({ BM_status: 'ready', BM_complete: false });
+  expect(BM_more.BM_status === 'ready' && BM_more.BM_items.length).toBe(24);
+  await expect(
+    BM_login.BM_save(BM_owner, null, { BM_works: ['999999999'], BM_allow_contains: [] })
+  ).rejects.toThrow();
+  const BM_window = BM_fake.BM_windows[0] as BrowserWindow;
+  vi.mocked(BM_window.webContents.executeJavaScript).mockResolvedValue({
+    BM_status: 'authenticated',
+    BM_account: { BM_display_name: 'BM other', BM_douyin_id: 'BM_other' },
+  });
+  expect(await BM_login.BM_works(BM_owner, 'refresh')).toEqual({
+    BM_status: 'failed',
+    BM_code: 'BM_works_login_changed',
+  });
+});
 it('rejects switched accounts and does not expose page exceptions', async () => {
   const BM_login = new BM_Login();
   await BM_login.BM_open(BM_owner, BM_root);
   await BM_login.BM_confirm(BM_owner);
+  await BM_login.BM_works(BM_owner, 'refresh');
   const BM_window = BM_fake.BM_windows[0] as BrowserWindow;
   vi.mocked(BM_window.webContents.executeJavaScript).mockResolvedValue({
     BM_status: 'authenticated',

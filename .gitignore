@@ -67,6 +67,7 @@ do_not_version/
 /ui/desktop/src/bin/BM_watch
 /ui/desktop/src/bin/BM_watch.exe
 /ui/desktop/src/bin/BM_watch.BM_new
+/ui/desktop/dist/
 /.env
 
 /working_dir
@@ -118,5 +119,9 @@ live-in-desktop-design
 /BM_custom/**/BM_secrets/
 /BM_custom/**/BM_venv/
 /BM_custom/**/*.local.*
+/.goose/
+**/BM_profile_*/
+**/BM_watch.local.json
+**/BM_account.local.json
 /BM_custom/**/.env
 /BM_custom/**/.env.*

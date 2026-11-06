@@ -1,8 +1,12 @@
 import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 import path from 'node:path';
+import os from 'node:os';
 import { findGooseBinaryPath } from '../gooseServe';
 import { BM_WatchManager } from './BM_manager';
 import type { BM_WatchAction } from './BM_types';
+import { BM_Login } from './BM_login';
+import { BM_createSchema, BM_defaultPrivateRoot } from './BM_privateConfig';
+import { z } from 'zod';
 
 export function BM_registerWatchIpc(
   BM_requireWindow: (BM_event: IpcMainInvokeEvent) => BrowserWindow
@@ -23,14 +27,36 @@ export function BM_registerWatchIpc(
     path.join(app.getPath('userData'), 'BM_watch.binding.json'),
     BM_binary
   );
+  const BM_login = new BM_Login();
+  const BM_gooseRoot =
+    process.env.GOOSE_PATH_ROOT && path.isAbsolute(process.env.GOOSE_PATH_ROOT)
+      ? process.env.GOOSE_PATH_ROOT
+      : null;
+  const BM_privateRoot = BM_defaultPrivateRoot(os.homedir(), BM_gooseRoot ?? undefined);
   ipcMain.handle('BM-watch:select', async (BM_event) => {
     const BM_window = BM_requireWindow(BM_event);
     const BM_result = await dialog.showOpenDialog(BM_window, {
       title: '选择评论值守私有配置',
       properties: ['openFile'],
+      defaultPath: await BM_manager.BM_configDirectory(BM_privateRoot),
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
     return BM_result.canceled ? null : BM_manager.BM_bind(BM_result.filePaths[0]);
+  });
+  ipcMain.handle('BM-watch:login', async (BM_event, BM_action: unknown) => {
+    const BM_window = BM_requireWindow(BM_event);
+    const BM_checked = z.enum(['open', 'confirm', 'cancel']).parse(BM_action);
+    if (BM_checked === 'cancel') return BM_login.BM_cancel(BM_window);
+    if ((await BM_manager.BM_snapshot()).BM_running) throw new Error('请先停止后台，再创建配置');
+    if (BM_checked === 'open') return BM_login.BM_open(BM_window, BM_privateRoot);
+    return BM_login.BM_confirm(BM_window);
+  });
+  ipcMain.handle('BM-watch:create', async (BM_event, BM_input: unknown) => {
+    const BM_window = BM_requireWindow(BM_event);
+    const BM_checked = BM_createSchema.parse(BM_input);
+    if ((await BM_manager.BM_snapshot()).BM_running) throw new Error('请先停止后台，再创建配置');
+    const BM_file = await BM_login.BM_save(BM_window, BM_gooseRoot, BM_checked);
+    return BM_manager.BM_bind(BM_file);
   });
   ipcMain.handle('BM-watch:snapshot', (BM_event) => {
     BM_requireWindow(BM_event);

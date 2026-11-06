@@ -20,7 +20,7 @@ use tokio_util::sync::CancellationToken;
 #[serde(deny_unknown_fields)]
 struct BM_Config {
     BM_data_dir: PathBuf,
-    BM_goose_root: PathBuf,
+    BM_goose_root: Option<PathBuf>,
     BM_admin_token: String,
     #[serde(default)]
     BM_webhook_secret: String,
@@ -110,9 +110,16 @@ fn BM_main() -> Result<()> {
     BM_lock
         .try_lock()
         .map_err(|_| anyhow::anyhow!("another worker owns this directory"))?;
-    ensure!(BM_config.BM_goose_root.is_dir(), "Goose root must exist");
     // Set once before creating worker threads, never per message.
-    std::env::set_var("GOOSE_PATH_ROOT", &BM_config.BM_goose_root);
+    if let Some(BM_goose_root) = &BM_config.BM_goose_root {
+        ensure!(
+            BM_goose_root.is_absolute() && BM_goose_root.is_dir(),
+            "Goose root must exist"
+        );
+        std::env::set_var("GOOSE_PATH_ROOT", BM_goose_root);
+    } else {
+        std::env::remove_var("GOOSE_PATH_ROOT");
+    }
     std::env::set_var("GOOSE_TELEMETRY_ENABLED", "false");
     std::env::set_var("GOOSE_DISABLE_KEYRING", "1");
     tokio::runtime::Builder::new_multi_thread()

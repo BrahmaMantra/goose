@@ -3,6 +3,7 @@ import { FolderOpen, Play, Pause, Square, RefreshCw, MessageSquare } from 'lucid
 import { MainPanelLayout } from '../components/Layout/MainPanelLayout';
 import { Button } from '../components/ui/button';
 import type { BM_Record, BM_Snapshot, BM_WatchAction } from './BM_types';
+import BM_CreateConfigView from './BM_CreateConfigView';
 
 const BM_labels: Record<string, string> = {
   queued: '待处理',
@@ -20,6 +21,7 @@ export default function BM_WatchView() {
   const [BM_records, BM_setRecords] = useState<BM_Record[]>([]);
   const [BM_busy, BM_setBusy] = useState(false);
   const [BM_error, BM_setError] = useState('');
+  const [BM_creating, BM_setCreating] = useState(false);
   const BM_cursor = useRef<number | undefined>(undefined);
   const BM_refresh = useCallback(async (BM_reset = false) => {
     if (BM_reset) BM_cursor.current = undefined;
@@ -133,10 +135,17 @@ export default function BM_WatchView() {
                 onClick={() => {
                   void BM_select();
                 }}
-                disabled={BM_busy || BM_running}
+                disabled={BM_busy || BM_running || BM_creating}
               >
                 <FolderOpen size={16} />
                 选择私有配置
+              </Button>
+              <Button
+                variant="outline"
+                disabled={BM_busy || BM_running || BM_creating}
+                onClick={() => BM_setCreating(true)}
+              >
+                创建新配置
               </Button>
             </div>
             {BM_snapshot?.BM_configured && (
@@ -170,7 +179,7 @@ export default function BM_WatchView() {
                 onClick={() => {
                   void BM_action('start');
                 }}
-                disabled={BM_busy || !BM_snapshot?.BM_configured || BM_running}
+                disabled={BM_busy || BM_creating || !BM_snapshot?.BM_configured || BM_running}
               >
                 <Play size={16} />
                 启动后台
@@ -200,6 +209,17 @@ export default function BM_WatchView() {
               关闭窗口后，已经启动的后台会继续运行。当前平台接入尚未完成：仅处理已入队消息并生成候选回复，不会自动读取或发送抖音评论。
             </p>
           </section>
+          {BM_creating && (
+            <BM_CreateConfigView
+              BM_onClose={() => BM_setCreating(false)}
+              BM_onSaved={(BM_next) => {
+                BM_cursor.current = undefined;
+                BM_setSnapshot(BM_next);
+                BM_setRecords([]);
+                BM_setCreating(false);
+              }}
+            />
+          )}
           {BM_error && (
             <p role="alert" className="rounded-lg bg-background-tertiary p-3 text-sm">
               {BM_error}

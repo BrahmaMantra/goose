@@ -7,6 +7,7 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { z } from 'zod';
+import { BM_outsideCheckout, BM_privateDirectory } from './BM_privateConfig';
 import {
   BM_actionSchema,
   BM_rulesSchema,
@@ -30,7 +31,7 @@ function BM_errorCode(BM_error: unknown): string | undefined {
 const BM_configSchema = z
   .object({
     BM_data_dir: z.string().min(1),
-    BM_goose_root: z.string().min(1),
+    BM_goose_root: z.string().min(1).nullable(),
     BM_admin_token: z.string().min(24),
     BM_webhook_secret: z.string().optional(),
     BM_client_key: z.string().optional(),
@@ -72,30 +73,10 @@ export class BM_WatchManager {
     }
   }
   private async BM_outsideCheckout(BM_path: string): Promise<void> {
-    if (!path.isAbsolute(BM_path)) throw new Error('私有路径必须是绝对路径');
-    let BM_current = BM_path;
-    while (true) {
-      try {
-        BM_current = await fs.realpath(BM_current);
-        break;
-      } catch (BM_error) {
-        if (BM_errorCode(BM_error) !== 'ENOENT') throw new Error('私有路径不可用');
-        const BM_parent = path.dirname(BM_current);
-        if (BM_parent === BM_current) throw new Error('私有路径不可用');
-        BM_current = BM_parent;
-      }
-    }
-    while (true) {
-      try {
-        await fs.lstat(path.join(BM_current, '.git'));
-        throw new Error('私有文件必须位于仓库外');
-      } catch (BM_error) {
-        if (!['ENOENT', 'ENOTDIR'].includes(BM_errorCode(BM_error) ?? '')) throw BM_error;
-      }
-      const BM_parent = path.dirname(BM_current);
-      if (BM_parent === BM_current) break;
-      BM_current = BM_parent;
-    }
+    return BM_outsideCheckout(BM_path);
+  }
+  async BM_configDirectory(BM_default: string): Promise<string> {
+    return BM_privateDirectory(BM_default);
   }
   private async BM_config(BM_file: string): Promise<BM_Config> {
     try {
@@ -255,7 +236,7 @@ export class BM_WatchManager {
   }
   private async BM_launch(BM_file: string, BM_config: BM_Config): Promise<void> {
     await fs.access(this.BM_binary, constants.X_OK);
-    await this.BM_outsideCheckout(BM_config.BM_goose_root);
+    if (BM_config.BM_goose_root) await this.BM_outsideCheckout(BM_config.BM_goose_root);
     await this.BM_outsideCheckout(BM_config.BM_data_dir);
     await fs.mkdir(BM_config.BM_data_dir, { recursive: true, mode: 0o700 });
     const BM_dir = await fs.lstat(BM_config.BM_data_dir);

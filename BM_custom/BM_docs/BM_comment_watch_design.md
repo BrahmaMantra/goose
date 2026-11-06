@@ -1,6 +1,8 @@
 # 评论区值守：单进程消息处理与 Goose 集成设计
 
-状态：最终架构设计，第一份代码 PR 已实现 Rust API library、常驻队列服务与进程内 Goose 适配；Goose 桌面管理与 Electron IPC 已接入；真实平台接入尚未完成。源码核查日期：2026-11-02。
+状态：已实现 Rust API library、常驻队列服务、进程内 Goose 适配、桌面管理、Electron IPC 与扫码创建私有配置；真实平台评论读写尚未完成。源码核查日期：2026-11-06。
+
+桌面扫码配置由 `BM_login` 管理官方网页窗口，`BM_privateConfig` 管理仓库外持久化，独立于 Rust 评论 API。新建账号使用独立浏览器目录，保存可见昵称与抖音号及值守规则；默认目录、取消清理和切换流程见 [桌面创建与账号切换](../BM_watch/BM_README.md#桌面创建与账号切换)。网页抖音号不等于 OpenAPI 身份，保存浏览器状态并未接通评论读取或发送。
 
 最新决定是使用 Rust 小型 API 封装，保持单个评论后台进程。当前入口与命令见 [BM_watch 使用说明](../BM_watch/BM_README.md)，API 状态见 [Rust API 分层](BM_douyin_api_design.md)。
 

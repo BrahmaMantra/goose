@@ -41,3 +41,13 @@ it('parses complete official video links and IDs while rejecting short or foreig
   expect(() => BM_parseWorks('https://v.douyin.com/BM_short')).toThrow();
   expect(() => BM_parseWorks('https://example.com/video/123456789')).toThrow();
 });
+it('shows the bounded main-process failure beside the login controls', async () => {
+  vi.mocked(window.electron.BM_watchLogin).mockResolvedValue({
+    BM_status: 'failed',
+    BM_code: 'BM_account_name_missing',
+  });
+  render(<BM_CreateConfigView BM_onSaved={vi.fn()} BM_onClose={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: '打开抖音扫码窗口' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('无法确定昵称所在的账号区域');
+  expect(screen.getByRole('button', { name: '保存私有配置' })).toBeDisabled();
+});

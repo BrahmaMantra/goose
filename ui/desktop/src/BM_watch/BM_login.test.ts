@@ -37,8 +37,8 @@ vi.mock('electron', () => ({
         session: BM_options.webPreferences.session,
         getURL: () => 'https://creator.douyin.com/creator-micro/home',
         executeJavaScript: vi.fn(async () => ({
-          BM_display_name: 'BM nickname',
-          BM_douyin_id: 'BM_id',
+          BM_status: 'authenticated',
+          BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
         })),
         setWindowOpenHandler: vi.fn(),
       });
@@ -108,7 +108,10 @@ it('rejects another renderer and clears authentication when creation is cancelle
   const BM_login = new BM_Login();
   await BM_login.BM_open(BM_owner, BM_root);
   const BM_other = { webContents: { id: 2 } } as BrowserWindow;
-  await expect(BM_login.BM_confirm(BM_other)).rejects.toThrow();
+  expect(await BM_login.BM_confirm(BM_other)).toEqual({
+    BM_status: 'failed',
+    BM_code: 'BM_window_unavailable',
+  });
   await BM_login.BM_cancel(BM_owner);
   expect(
     (BM_fake.BM_sessions[0] as { clearStorageData: ReturnType<typeof vi.fn> }).clearStorageData
@@ -133,8 +136,8 @@ it('rejects switched accounts and does not expose page exceptions', async () => 
   await BM_login.BM_confirm(BM_owner);
   const BM_window = BM_fake.BM_windows[0] as BrowserWindow;
   vi.mocked(BM_window.webContents.executeJavaScript).mockResolvedValue({
-    BM_display_name: 'BM other',
-    BM_douyin_id: 'BM_other',
+    BM_status: 'authenticated',
+    BM_account: { BM_display_name: 'BM other', BM_douyin_id: 'BM_other' },
   });
   await expect(
     BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
@@ -142,7 +145,46 @@ it('rejects switched accounts and does not expose page exceptions', async () => 
   vi.mocked(BM_window.webContents.executeJavaScript).mockRejectedValue(
     new Error('BM secret page exception')
   );
-  await expect(BM_login.BM_confirm(BM_owner)).rejects.toThrow('扫码配置操作未完成');
+  expect(await BM_login.BM_confirm(BM_owner)).toEqual({
+    BM_status: 'failed',
+    BM_code: 'BM_page_read_failed',
+  });
+});
+it('reports a missing header without leaking an earlier observed account', async () => {
+  const BM_login = new BM_Login();
+  await BM_login.BM_open(BM_owner, BM_root);
+  await BM_login.BM_confirm(BM_owner);
+  const BM_window = BM_fake.BM_windows[0] as BrowserWindow;
+  vi.mocked(BM_window.webContents.executeJavaScript).mockResolvedValue({
+    BM_status: 'failed',
+    BM_code: 'BM_account_header_missing',
+  });
+  expect(await BM_login.BM_confirm(BM_owner)).toEqual({
+    BM_status: 'failed',
+    BM_code: 'BM_account_header_missing',
+  });
+  await expect(
+    BM_login.BM_save(BM_owner, null, { BM_works: ['123456789'], BM_allow_contains: [] })
+  ).rejects.toThrow();
+});
+it('bounds a stuck page read and releases the cancellation queue', async () => {
+  const BM_login = new BM_Login();
+  await BM_login.BM_open(BM_owner, BM_root);
+  const BM_window = BM_fake.BM_windows[0] as BrowserWindow;
+  vi.mocked(BM_window.webContents.executeJavaScript).mockImplementation(
+    () => new Promise(() => {})
+  );
+  vi.useFakeTimers();
+  try {
+    const BM_confirmation = BM_login.BM_confirm(BM_owner);
+    const BM_cancellation = BM_login.BM_cancel(BM_owner);
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(await BM_confirmation).toEqual({ BM_status: 'failed', BM_code: 'BM_read_timeout' });
+    await BM_cancellation;
+    expect(BM_window.isDestroyed()).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it('extracts only a visible unambiguous official account header', () => {
   document.body.innerHTML =
@@ -158,14 +200,23 @@ it('extracts only a visible unambiguous official account header', () => {
   );
   const BM_location = { origin: 'https://creator.douyin.com', pathname: '/creator-micro/home' };
   expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
-    BM_display_name: 'BM nickname',
-    BM_douyin_id: 'BM_id',
+    BM_status: 'authenticated',
+    BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
+  });
+  document.body.innerHTML =
+    '<main><section><button>BM nickname</button><div><span>抖音号：<strong>BM_id</strong><svg><path /></svg></span></div></section></main>';
+  expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
+    BM_status: 'authenticated',
+    BM_account: { BM_display_name: 'BM nickname', BM_douyin_id: 'BM_id' },
   });
   expect(
     BM_read({ ...BM_location, origin: 'https://example.com' }, document, window.getComputedStyle)
-  ).toBeNull();
+  ).toEqual({ BM_status: 'failed', BM_code: 'BM_not_creator_home' });
   document.querySelector('main')?.insertAdjacentHTML('beforeend', '<span>抖音号：BM_other</span>');
-  expect(BM_read(BM_location, document, window.getComputedStyle)).toBeNull();
+  expect(BM_read(BM_location, document, window.getComputedStyle)).toEqual({
+    BM_status: 'failed',
+    BM_code: 'BM_account_header_ambiguous',
+  });
   vi.restoreAllMocks();
   for (const BM_url of [
     'http://creator.douyin.com',

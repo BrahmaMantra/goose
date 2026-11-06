@@ -1,6 +1,8 @@
 import { BrowserWindow, session } from 'electron';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { BM_loginMessages, type BM_LoginCode, type BM_LoginResult } from './BM_loginStatus';
+export type { BM_LoginResult } from './BM_loginStatus';
 import {
   BM_accountSchema,
   BM_privateDirectory,
@@ -25,26 +27,59 @@ export function BM_allowedLoginUrl(BM_value: string): boolean {
   }
 }
 
-// Same visible account-header contract as BM_browser_account.py, with no page-state/API probing.
+// Only inspect visible official-page elements, never cookies, page globals or undocumented APIs.
 export const BM_readAccountScript = `(() => {
+  const BM_fail = BM_code => ({BM_status:'failed', BM_code});
   if (location.origin !== 'https://creator.douyin.com' ||
-      !['/', '/creator-micro/home'].includes(location.pathname)) return null;
+      !['/', '/creator-micro/home'].includes(location.pathname.replace(/\\/$/, '') || '/'))
+    return BM_fail('BM_not_creator_home');
+  if (document.readyState === 'loading') return BM_fail('BM_page_loading');
   const BM_visible = BM_el => BM_el.getClientRects().length > 0 &&
     getComputedStyle(BM_el).visibility !== 'hidden';
-  const BM_labels = [...document.querySelectorAll('main *')].filter(BM_el =>
-    BM_el.children.length === 0 && /^抖音号[：:]/.test(BM_el.textContent.trim()) && BM_visible(BM_el));
-  if (BM_labels.length !== 1) return null;
+  const BM_text = BM_el => (BM_el.innerText ?? BM_el.textContent ?? '').trim();
+  const BM_matches = [...document.querySelectorAll('main *')].filter(BM_el =>
+    /^抖音号[：:]/.test(BM_text(BM_el)) && BM_visible(BM_el));
+  // Keep the deepest matching label; ancestor wrappers and icon children are not extra accounts.
+  const BM_labels = BM_matches.filter(BM_el => !BM_matches.some(BM_child =>
+    BM_child !== BM_el && BM_el.contains(BM_child)));
+  if (!BM_labels.length) {
+    const BM_login = [...document.querySelectorAll('button,[role="button"]')].some(BM_el =>
+      BM_visible(BM_el) && /登录/.test(BM_text(BM_el)));
+    return BM_fail(BM_login ? 'BM_login_required' : 'BM_account_header_missing');
+  }
+  if (BM_labels.length !== 1) return BM_fail('BM_account_header_ambiguous');
   const BM_label = BM_labels[0];
-  const BM_buttons = BM_label.parentElement?.querySelectorAll('button');
-  if (BM_buttons?.length !== 1 || !BM_visible(BM_buttons[0])) return null;
-  return {BM_display_name: BM_buttons[0].textContent.trim(),
-    BM_douyin_id: BM_label.textContent.replace(/^抖音号[：:]\\s*/, '').trim()};
+  let BM_parent = BM_label.parentElement;
+  for (let BM_level = 0; BM_level < 2 && BM_parent && BM_parent.tagName !== 'MAIN'; BM_level++, BM_parent = BM_parent.parentElement) {
+    const BM_buttons = [...BM_parent.querySelectorAll('button,[role="button"]')].filter(BM_el =>
+      BM_visible(BM_el) && BM_text(BM_el));
+    if (BM_buttons.length > 1) break;
+    if (BM_buttons.length === 1) return {BM_status:'authenticated', BM_account:{
+      BM_display_name: BM_text(BM_buttons[0]),
+      BM_douyin_id: BM_text(BM_label).replace(/^抖音号[：:]\\s*/, '').trim()}};
+  }
+  return BM_fail('BM_account_name_missing');
 })()`;
 
-export type BM_LoginResult = {
-  BM_status: 'opened' | 'authenticated' | 'cancelled';
-  BM_account?: BM_Account;
-};
+class BM_LoginError extends Error {
+  constructor(readonly BM_code: BM_LoginCode) {
+    super(BM_loginMessages[BM_code]);
+  }
+}
+
+async function BM_withReadTimeout<T>(BM_work: Promise<T>): Promise<T> {
+  let BM_timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      BM_work,
+      new Promise<never>((_BM_resolve, BM_reject) => {
+        BM_timer = setTimeout(() => BM_reject(new BM_LoginError('BM_read_timeout')), 8000);
+      }),
+    ]);
+  } finally {
+    if (BM_timer) clearTimeout(BM_timer);
+  }
+}
 
 export class BM_Login {
   private BM_pending?: {
@@ -73,7 +108,7 @@ export class BM_Login {
       BM_value.BM_owner !== BM_owner.webContents.id ||
       BM_value.BM_window.isDestroyed()
     )
-      throw new Error('请重新打开扫码窗口');
+      throw new BM_LoginError('BM_window_unavailable');
     return BM_value;
   }
   async BM_open(BM_owner: BrowserWindow, BM_root: string): Promise<BM_LoginResult> {
@@ -81,10 +116,9 @@ export class BM_Login {
       if (this.BM_pending && !this.BM_pending.BM_window.isDestroyed()) {
         const BM_existing = this.BM_owned(BM_owner);
         BM_existing.BM_window.show();
-        return {
-          BM_status: BM_existing.BM_account ? 'authenticated' : 'opened',
-          BM_account: BM_existing.BM_account,
-        };
+        return BM_existing.BM_account
+          ? { BM_status: 'authenticated', BM_account: BM_existing.BM_account }
+          : { BM_status: 'opened' };
       }
       await BM_privateDirectory(BM_root);
       const BM_dir = await BM_privateDirectory(path.join(BM_root, `BM_profile_${randomUUID()}`));
@@ -141,20 +175,36 @@ export class BM_Login {
     const BM_url = new URL(BM_window.webContents.getURL());
     if (
       BM_url.origin !== 'https://creator.douyin.com' ||
-      !['/', '/creator-micro/home'].includes(BM_url.pathname)
+      !['/', '/creator-micro/home'].includes(BM_url.pathname.replace(/\/$/, '') || '/')
     )
-      throw new Error('请在扫码窗口进入抖音创作者中心首页');
-    const BM_result = BM_accountSchema.safeParse(
-      await BM_window.webContents.executeJavaScript(BM_readAccountScript)
+      throw new BM_LoginError('BM_not_creator_home');
+    const BM_observation = await BM_withReadTimeout(
+      BM_window.webContents.executeJavaScript(BM_readAccountScript)
     );
-    if (!BM_result.success) throw new Error('未读取到账号，请完成扫码并等待创作者中心首页加载');
+    if (
+      BM_observation?.BM_status === 'failed' &&
+      typeof BM_observation.BM_code === 'string' &&
+      Object.hasOwn(BM_loginMessages, BM_observation.BM_code)
+    )
+      throw new BM_LoginError(BM_observation.BM_code as BM_LoginCode);
+    const BM_result = BM_accountSchema.safeParse(BM_observation?.BM_account);
+    if (!BM_result.success) throw new BM_LoginError('BM_account_header_missing');
     return BM_result.data;
   }
   async BM_confirm(BM_owner: BrowserWindow): Promise<BM_LoginResult> {
     return this.BM_serial(async () => {
-      const BM_value = this.BM_owned(BM_owner);
-      BM_value.BM_account = await this.BM_observe(BM_value.BM_window);
-      return { BM_status: 'authenticated', BM_account: BM_value.BM_account };
+      try {
+        const BM_value = this.BM_owned(BM_owner);
+        BM_value.BM_account = undefined;
+        BM_value.BM_account = await this.BM_observe(BM_value.BM_window);
+        console.info('[BM_watch] login confirm: authenticated');
+        return { BM_status: 'authenticated', BM_account: BM_value.BM_account };
+      } catch (BM_error) {
+        const BM_code =
+          BM_error instanceof BM_LoginError ? BM_error.BM_code : 'BM_page_read_failed';
+        console.info('[BM_watch] login confirm:', BM_code);
+        return { BM_status: 'failed', BM_code };
+      }
     });
   }
   async BM_save(

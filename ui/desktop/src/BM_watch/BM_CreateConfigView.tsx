@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '../components/ui/button';
 import type { BM_Account } from './BM_privateConfig';
 import type { BM_Snapshot } from './BM_types';
+import { BM_loginMessages } from './BM_loginStatus';
 
 export function BM_parseWorks(BM_text: string): string[] {
   return [
@@ -43,6 +44,7 @@ export default function BM_CreateConfigView({
   const [BM_keywords, BM_setKeywords] = useState('');
   const [BM_error, BM_setError] = useState('');
   const [BM_opened, BM_setOpened] = useState(false);
+  const [BM_loginAction, BM_setLoginAction] = useState<'open' | 'confirm' | null>(null);
   useEffect(
     () => () => {
       void window.electron.BM_watchLogin('cancel').catch(() => undefined);
@@ -51,9 +53,16 @@ export default function BM_CreateConfigView({
   );
   const BM_login = async (BM_action: 'open' | 'confirm') => {
     BM_setBusy(true);
+    BM_setLoginAction(BM_action);
     BM_setError('');
     try {
       const BM_result = await window.electron.BM_watchLogin(BM_action);
+      if (BM_result.BM_status === 'failed') {
+        BM_setAccount(null);
+        BM_setError(BM_loginMessages[BM_result.BM_code]);
+        if (BM_result.BM_code === 'BM_window_unavailable') BM_setOpened(false);
+        return;
+      }
       BM_setOpened(true);
       BM_setAccount(BM_result.BM_account ?? null);
     } catch {
@@ -64,6 +73,7 @@ export default function BM_CreateConfigView({
       );
     } finally {
       BM_setBusy(false);
+      BM_setLoginAction(null);
     }
   };
   const BM_save = async () => {
@@ -116,6 +126,16 @@ export default function BM_CreateConfigView({
           已扫码，读取账号
         </Button>
       </div>
+      {BM_loginAction && (
+        <p role="status" className="text-sm">
+          {BM_loginAction === 'open' ? '正在打开官方扫码窗口…' : '正在读取官方首页账号…'}
+        </p>
+      )}
+      {BM_error && (
+        <p role="alert" className="text-sm">
+          {BM_error}
+        </p>
+      )}
       {BM_account && (
         <p role="status">
           已确认：{BM_account.BM_display_name}（抖音号：{BM_account.BM_douyin_id}）
@@ -146,11 +166,6 @@ export default function BM_CreateConfigView({
         保存后绑定此配置，后台保持未启动。扫码登录不授予开放平台 API
         权限，作品归属将在真实平台接入时校验。
       </p>
-      {BM_error && (
-        <p role="alert" className="text-sm">
-          {BM_error}
-        </p>
-      )}
       <div className="flex gap-2">
         <Button
           disabled={BM_busy || !BM_account || !BM_works.trim()}

@@ -12,7 +12,7 @@ export const BM_statusNames = [
   'accepted',
   'unknown',
 ] as const;
-export const BM_defaultReplyMarker = '【from deepseek】';
+export const BM_defaultReplyMarker = '【from DeepSeek-V4.1-Flash-1017】';
 export const BM_replyMarkerSchema = z
   .string()
   .trim()

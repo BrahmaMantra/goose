@@ -49,7 +49,7 @@ it('loads official works after QR confirmation and saves only checked IDs', asyn
   fireEvent.click(screen.getByRole('button', { name: '已扫码，读取账号' }));
   await screen.findByText(/BM selectable work/);
   expect(window.electron.BM_watchListWorks).toHaveBeenCalledWith('refresh');
-  expect(screen.getByLabelText(/AI 回复标记/)).toHaveValue('【from deepseek】');
+  expect(screen.getByLabelText(/AI 回复标记/)).toHaveValue('【from DeepSeek-V4.1-Flash-1017】');
   fireEvent.change(screen.getByLabelText(/拒绝词/), { target: { value: '/clear\n/delete' } });
   fireEvent.change(screen.getByLabelText(/AI 回复标记/), {
     target: { value: '【from BM model】' },

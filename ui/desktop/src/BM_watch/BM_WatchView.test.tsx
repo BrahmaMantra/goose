@@ -15,7 +15,7 @@ beforeEach(() => {
     BM_works: ['BM_work'],
     BM_deny_contains: ['question'],
     BM_max_reply_chars: 200,
-    BM_reply_marker: '【from deepseek】',
+    BM_reply_marker: '【from DeepSeek-V4.1-Flash-1017】',
     BM_interval_seconds: 30,
   };
   Object.assign(window.electron, {

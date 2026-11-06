@@ -58,12 +58,12 @@ just watch-stop /path/to/private/BM_watch.local.json
 
 自己的人工评论也可触发，仍使用 external 受限 Runtime。只有自己的 AI 回复会跳过：归一化消息可设置 `BM_is_ai_reply=true`；未标注时使用当前 AI 标记前缀和同账号、同作品的已提交回复记录保守防循环。当前标记更换后，旧的 sending/accepted/unknown 回复仍能按记录识别。前缀是显示约定，不是不可伪造的 AI 身份；自己的人工评论若使用同一标记开头，也会被跳过。
 
-`BM_rules.BM_reply_marker` 默认 `【from deepseek】`，可在创建配置界面或私有 JSON 中修改成实际模型名称或其他提示。标记必须包含非空的 `【…】`，不含控制字符，最多 120 字符，并为回复正文留出长度预算。程序在模型输出后添加标记，已带同一前缀时不重复添加；模型只决定正文及是否建议发送。标记和分隔空格计入 `BM_max_reply_chars`，默认总长 200 字符；超长回复保留为待审核候选，不截断或发送。
+`BM_rules.BM_reply_marker` 默认 `【from DeepSeek-V4.1-Flash-1017】`，可在创建配置界面或私有 JSON 中修改成实际模型名称或其他提示。默认版本依据[DeepSeek 官方 API 文档](https://api-docs.deepseek.com/)于 2026-11-06 的说明：`deepseek-flash` 当前由 DeepSeek-V4.1-Flash-1017 提供。API 别名可能随服务升级调整；显示标记不锁定实际模型版本，切换模型或服务版本后应同步修改标记。标记必须包含非空的 `【…】`，不含控制字符，最多 120 字符，并为回复正文留出长度预算。程序在模型输出后添加标记，已带同一前缀时不重复添加；模型只决定正文及是否建议发送。标记和分隔空格计入 `BM_max_reply_chars`，默认总长 200 字符；超长回复保留为待审核候选，不截断或发送。
 
 ```json
 {
   "BM_deny_contains": ["/clear", "/delete"],
-  "BM_reply_marker": "【from deepseek】",
+  "BM_reply_marker": "【from DeepSeek-V4.1-Flash-1017】",
   "BM_max_reply_chars": 200
 }
 ```

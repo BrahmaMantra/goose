@@ -64,7 +64,7 @@ fn BM_make_worker(BM_store: BM_Store, BM_fixture: Arc<BM_Fixture>) -> BM_Worker 
             BM_works: vec!["BM_work".into()],
             BM_deny_contains: vec!["/clear".into()],
             BM_max_reply_chars: 100,
-            BM_reply_marker: "【from deepseek】".into(),
+            BM_reply_marker: "【from DeepSeek-V4.1-Flash-1017】".into(),
         },
         BM_generator: BM_fixture.clone(),
         BM_platform: BM_fixture,
@@ -282,13 +282,13 @@ async fn BM_denied_words_skip_without_model_calls_and_marker_counts_in_length() 
         BM_store.BM_records(None).await.unwrap()[0]
             .BM_reply
             .as_deref(),
-        Some("【from deepseek】 BM answer")
+        Some("【from DeepSeek-V4.1-Flash-1017】 BM answer")
     );
     assert_eq!(
         BM_worker
             .BM_rules
-            .BM_mark_reply("【from deepseek】 BM answer"),
-        "【from deepseek】 BM answer"
+            .BM_mark_reply("【from DeepSeek-V4.1-Flash-1017】 BM answer"),
+        "【from DeepSeek-V4.1-Flash-1017】 BM answer"
     );
 }
 
@@ -296,6 +296,9 @@ async fn BM_denied_words_skip_without_model_calls_and_marker_counts_in_length() 
 fn BM_legacy_rules_use_deny_semantics_and_default_marker() {
     let BM_rules:BM_Rules=serde_json::from_value(serde_json::json!({"BM_account":"BM_owner","BM_works":["BM_work"],"BM_allow_contains":["/clear"],"BM_max_reply_chars":200})).unwrap();
     assert_eq!(BM_rules.BM_deny_contains, vec!["/clear"]);
-    assert_eq!(BM_rules.BM_reply_marker, "【from deepseek】");
+    assert_eq!(
+        BM_rules.BM_reply_marker,
+        "【from DeepSeek-V4.1-Flash-1017】"
+    );
     BM_rules.BM_validate().unwrap();
 }

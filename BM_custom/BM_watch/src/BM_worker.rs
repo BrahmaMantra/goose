@@ -26,7 +26,7 @@ pub struct BM_Rules {
 }
 
 pub fn BM_default_reply_marker() -> String {
-    "【from deepseek】".into()
+    "【from DeepSeek-V4.1-Flash-1017】".into()
 }
 
 impl BM_Rules {

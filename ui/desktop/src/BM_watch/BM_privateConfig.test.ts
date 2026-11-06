@@ -2,7 +2,13 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { BM_defaultPrivateRoot, BM_privateDirectory, BM_saveConfig } from './BM_privateConfig';
+import {
+  BM_defaultPrivateRoot,
+  BM_privateDirectory,
+  BM_saveConfig,
+  BM_flatConfigPath,
+  BM_flattenConfigs,
+} from './BM_privateConfig';
 let BM_root: string;
 beforeEach(async () => {
   BM_root = await fs.mkdtemp(path.join(os.tmpdir(), 'BM_config_test_'));
@@ -46,4 +52,30 @@ it('never replaces an existing account configuration', async () => {
   const BM_original = await fs.readFile(BM_file, 'utf8');
   await expect(BM_saveConfig(BM_dir, null, BM_account, BM_input)).rejects.toThrow();
   expect(await fs.readFile(BM_file, 'utf8')).toBe(BM_original);
+});
+it('puts configuration JSONs in one root while preserving private profile data', async () => {
+  const BM_profile = path.join(BM_root, 'BM_profiles', 'BM_profile_test');
+  const BM_file = await BM_saveConfig(BM_profile, null, BM_account, BM_input, BM_root);
+  expect(path.dirname(BM_file)).toBe(BM_root);
+  expect(BM_file).toBe(BM_flatConfigPath(BM_root, BM_profile));
+  expect(JSON.parse(await fs.readFile(BM_file, 'utf8')).BM_data_dir).toBe(
+    path.join(BM_profile, 'BM_data')
+  );
+  expect((await fs.stat(BM_file)).mode & 0o077).toBe(0);
+});
+it('copies legacy configs once without changing tokens, paths, bindings or later edits', async () => {
+  const BM_profile = path.join(BM_root, 'BM_profile_legacy');
+  const BM_old = await BM_saveConfig(BM_profile, null, BM_account, BM_input);
+  const BM_contents = await fs.readFile(BM_old, 'utf8');
+  await BM_flattenConfigs(BM_root);
+  const BM_new = BM_flatConfigPath(BM_root, BM_profile);
+  expect(await fs.readFile(BM_new, 'utf8')).toBe(BM_contents);
+  expect(await fs.readFile(BM_old, 'utf8')).toBe(BM_contents);
+  const BM_changed = JSON.parse(BM_contents);
+  BM_changed.BM_rules.BM_allow_contains = ['BM edited rule'];
+  await fs.writeFile(BM_new, JSON.stringify(BM_changed));
+  await BM_flattenConfigs(BM_root);
+  expect(JSON.parse(await fs.readFile(BM_new, 'utf8')).BM_rules.BM_allow_contains).toEqual([
+    'BM edited rule',
+  ]);
 });

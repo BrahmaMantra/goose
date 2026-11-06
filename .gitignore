@@ -122,6 +122,7 @@ live-in-desktop-design
 /.goose/
 **/BM_profile_*/
 **/BM_watch.local.json
+**/BM_watch_*.local.json
 **/BM_account.local.json
 /BM_custom/**/.env
 /BM_custom/**/.env.*

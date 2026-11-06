@@ -22,6 +22,7 @@ beforeEach(() => {
   vi.doMock('./BM_manager', () => ({
     BM_WatchManager: class {
       BM_bind = BM_bind;
+      BM_bindFromDirectory = async (BM_file: string) => BM_bind(BM_file);
       BM_snapshot = BM_snapshot;
       BM_action = vi.fn();
       BM_records = vi.fn();

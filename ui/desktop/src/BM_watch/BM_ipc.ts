@@ -36,13 +36,16 @@ export function BM_registerWatchIpc(
   const BM_privateRoot = BM_defaultPrivateRoot(os.homedir(), BM_gooseRoot ?? undefined);
   ipcMain.handle('BM-watch:select', async (BM_event) => {
     const BM_window = BM_requireWindow(BM_event);
+    const BM_directory = await BM_manager.BM_configDirectory(BM_privateRoot);
     const BM_result = await dialog.showOpenDialog(BM_window, {
       title: '选择评论值守私有配置',
       properties: ['openFile'],
-      defaultPath: await BM_manager.BM_configDirectory(BM_privateRoot),
+      defaultPath: BM_directory,
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
-    return BM_result.canceled ? null : BM_manager.BM_bind(BM_result.filePaths[0]);
+    return BM_result.canceled
+      ? null
+      : BM_manager.BM_bindFromDirectory(BM_result.filePaths[0], BM_directory);
   });
   ipcMain.handle('BM-watch:login', async (BM_event, BM_action: unknown) => {
     const BM_window = BM_requireWindow(BM_event);

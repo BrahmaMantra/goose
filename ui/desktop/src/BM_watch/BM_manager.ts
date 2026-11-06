@@ -7,7 +7,7 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { z } from 'zod';
-import { BM_outsideCheckout, BM_privateDirectory } from './BM_privateConfig';
+import { BM_outsideCheckout, BM_flattenConfigs } from './BM_privateConfig';
 import {
   BM_actionSchema,
   BM_rulesSchema,
@@ -76,7 +76,22 @@ export class BM_WatchManager {
     return BM_outsideCheckout(BM_path);
   }
   async BM_configDirectory(BM_default: string): Promise<string> {
-    return BM_privateDirectory(BM_default);
+    try {
+      await BM_flattenConfigs(BM_default);
+      return BM_default;
+    } catch {
+      throw new Error('无法准备统一私有配置目录，请检查目录与旧配置权限');
+    }
+  }
+  async BM_bindFromDirectory(BM_file: string, BM_root: string): Promise<BM_Snapshot> {
+    try {
+      const BM_parent = await fs.realpath(path.dirname(BM_file));
+      const BM_directory = await fs.realpath(BM_root);
+      if (BM_parent !== BM_directory) throw new Error('请选择统一私有配置目录中的 JSON 文件');
+    } catch {
+      throw new Error('请选择统一私有配置目录中的有效 JSON 文件');
+    }
+    return this.BM_bind(BM_file);
   }
   private async BM_config(BM_file: string): Promise<BM_Config> {
     try {

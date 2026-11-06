@@ -114,6 +114,7 @@ export class BM_Login {
     BM_window: BrowserWindow;
     BM_owner: number;
     BM_dir: string;
+    BM_root: string;
     BM_account?: BM_Account;
     BM_works?: Map<string, BM_Work>;
     BM_workTarget?: number;
@@ -152,7 +153,10 @@ export class BM_Login {
           : { BM_status: 'opened' };
       }
       await BM_privateDirectory(BM_root);
-      const BM_dir = await BM_privateDirectory(path.join(BM_root, `BM_profile_${randomUUID()}`));
+      const BM_profiles = await BM_privateDirectory(path.join(BM_root, 'BM_profiles'));
+      const BM_dir = await BM_privateDirectory(
+        path.join(BM_profiles, `BM_profile_${randomUUID()}`)
+      );
       const BM_browser = await BM_privateDirectory(path.join(BM_dir, 'BM_browser'));
       const BM_session = session.fromPath(BM_browser, { cache: false });
       BM_session.setPermissionRequestHandler((_BM_contents, _BM_permission, BM_callback) =>
@@ -194,7 +198,7 @@ export class BM_Login {
         if (BM_navigation.isMainFrame && !BM_allowedLoginUrl(BM_navigation.url))
           BM_navigation.preventDefault();
       });
-      this.BM_pending = { BM_window, BM_owner: BM_owner.webContents.id, BM_dir };
+      this.BM_pending = { BM_window, BM_owner: BM_owner.webContents.id, BM_dir, BM_root };
       // A manually closed, unfinished login does not keep reusable authentication data.
       BM_window.on('closed', () => {
         if (this.BM_pending?.BM_window === BM_window) {
@@ -362,7 +366,13 @@ export class BM_Login {
         throw new Error('扫码窗口的账号已变化，请重新确认账号');
       await BM_value.BM_window.webContents.session.cookies.flushStore();
       BM_value.BM_window.webContents.session.flushStorageData();
-      const BM_file = await BM_saveConfig(BM_value.BM_dir, BM_gooseRoot, BM_account, BM_input);
+      const BM_file = await BM_saveConfig(
+        BM_value.BM_dir,
+        BM_gooseRoot,
+        BM_account,
+        BM_input,
+        BM_value.BM_root
+      );
       this.BM_pending = undefined;
       BM_value.BM_window.close();
       return BM_file;

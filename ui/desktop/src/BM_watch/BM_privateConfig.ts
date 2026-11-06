@@ -1,7 +1,8 @@
 /* eslint-disable preserve-caught-error -- Filesystem errors must not expose private paths over IPC. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID, createHash } from 'node:crypto';
+import { constants } from 'node:fs';
 import { z } from 'zod';
 
 export async function BM_outsideCheckout(BM_path: string): Promise<void> {
@@ -65,13 +66,62 @@ export const BM_createSchema = z
   .strict();
 export type BM_CreateConfig = z.infer<typeof BM_createSchema>;
 
+export function BM_flatConfigPath(BM_root: string, BM_profile: string): string {
+  const BM_key = createHash('sha256').update(BM_profile).digest('hex').slice(0, 16);
+  return path.join(BM_root, `BM_watch_${BM_key}.local.json`);
+}
+
+export async function BM_flattenConfigs(BM_root: string): Promise<void> {
+  await BM_privateDirectory(BM_root);
+  const BM_entries = await fs.readdir(BM_root, { withFileTypes: true });
+  for (const BM_entry of BM_entries) {
+    if (!BM_entry.isDirectory() || !/^BM_profile_[a-zA-Z0-9_-]+$/.test(BM_entry.name)) continue;
+    const BM_profile = await BM_privateDirectory(path.join(BM_root, BM_entry.name));
+    const BM_handle = await fs
+      .open(path.join(BM_profile, 'BM_watch.local.json'), constants.O_RDONLY | constants.O_NOFOLLOW)
+      .catch((BM_error: unknown) => {
+        if (BM_error instanceof Error && 'code' in BM_error && BM_error.code === 'ENOENT')
+          return null;
+        throw BM_error;
+      });
+    if (!BM_handle) continue;
+    let BM_contents: string;
+    try {
+      const BM_stat = await BM_handle.stat();
+      if (!BM_stat.isFile() || (BM_stat.mode & 0o077) !== 0 || BM_stat.size > 65536)
+        throw new Error('旧配置权限或大小不符合要求');
+      BM_contents = await BM_handle.readFile('utf8');
+      const BM_config = JSON.parse(BM_contents);
+      BM_createSchema.parse({
+        BM_works: BM_config.BM_rules?.BM_works,
+        BM_allow_contains: BM_config.BM_rules?.BM_allow_contains,
+      });
+    } finally {
+      await BM_handle.close();
+    }
+    const BM_destination = BM_flatConfigPath(BM_root, BM_profile);
+    const BM_tmp = path.join(BM_root, `BM_migration_${randomUUID()}.local.json`);
+    try {
+      await fs.writeFile(BM_tmp, BM_contents, { mode: 0o600, flag: 'wx' });
+      await fs.link(BM_tmp, BM_destination).catch((BM_error: unknown) => {
+        if (!(BM_error instanceof Error) || !('code' in BM_error) || BM_error.code !== 'EEXIST')
+          throw BM_error;
+      });
+    } finally {
+      await fs.rm(BM_tmp, { force: true });
+    }
+  }
+}
+
 export async function BM_saveConfig(
   BM_dir: string,
   BM_gooseRoot: string | null,
   BM_account: BM_Account,
-  BM_input: BM_CreateConfig
+  BM_input: BM_CreateConfig,
+  BM_configRoot: string = BM_dir
 ): Promise<string> {
   await BM_privateDirectory(BM_dir);
+  await BM_privateDirectory(BM_configRoot);
   if (BM_gooseRoot) await BM_outsideCheckout(BM_gooseRoot);
   const BM_rules = BM_createSchema.parse(BM_input);
   const BM_identity = BM_accountSchema.parse(BM_account);
@@ -92,8 +142,11 @@ export async function BM_saveConfig(
     ),
     { mode: 0o600, flag: 'wx' }
   );
-  const BM_config = path.join(BM_dir, 'BM_watch.local.json');
-  const BM_tmp = path.join(BM_dir, `BM_config_${randomUUID()}.local.json`);
+  const BM_config =
+    BM_configRoot === BM_dir
+      ? path.join(BM_dir, 'BM_watch.local.json')
+      : BM_flatConfigPath(BM_configRoot, BM_dir);
+  const BM_tmp = path.join(BM_configRoot, `BM_config_${randomUUID()}.local.json`);
   try {
     await fs.writeFile(
       BM_tmp,

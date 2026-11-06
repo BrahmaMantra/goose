@@ -85,6 +85,14 @@ afterEach(async () => {
 });
 
 describe('BM desktop manager boundary', () => {
+  it('accepts desktop selection only from the configured private directory', async () => {
+    expect((await BM_manager.BM_bindFromDirectory(BM_file, BM_root)).BM_configured).toBe(true);
+    const BM_other = path.join(BM_root, 'BM_other');
+    await fs.mkdir(BM_other, { mode: 0o700 });
+    await expect(BM_manager.BM_bindFromDirectory(BM_file, BM_other)).rejects.toThrow(
+      '统一私有配置目录'
+    );
+  });
   it('projects actual running task without tokens or private paths and persists binding', async () => {
     const BM_snapshot = await BM_manager.BM_bind(BM_file);
     expect(BM_snapshot.BM_running).toBe(true);

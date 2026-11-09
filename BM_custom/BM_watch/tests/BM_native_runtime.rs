@@ -67,7 +67,7 @@ fn BM_real_goose_reuses_runtime_with_external_tools_only() {
             assert_eq!(BM_names,vec!["recipe__final_output"]);
             assert!(!BM_request.to_string().contains("placeholder"));
             let BM_prompt=BM_request["messages"].as_array().unwrap().iter().filter(|BM_message|BM_message["role"]=="system").map(|BM_message|BM_message["content"].to_string()).collect::<String>();
-            assert!(BM_prompt.contains("大肥鱼"));assert!(BM_prompt.contains("防御性边界"));assert!(BM_prompt.contains("简体中文"));assert!(BM_prompt.contains("BM_send=false"));
+            assert!(BM_prompt.contains(bm_watch::BM_prompt::BM_PUBLIC_NAME));assert!(BM_prompt.contains("防御性边界"));assert!(BM_prompt.contains("简体中文"));assert!(BM_prompt.contains("BM_send=false"));
         }
         BM_server.abort();
     });

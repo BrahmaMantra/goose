@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-use bm_watch::BM_prompt::BM_reply_recipe;
+use bm_watch::BM_prompt::{BM_reply_recipe, BM_PUBLIC_NAME};
 use std::{
     fs,
     os::unix::fs::{symlink, PermissionsExt},
@@ -21,13 +21,13 @@ fn BM_prompt_context_is_private_and_does_not_enable_tools_or_change_schema() {
         .unwrap()
         .contains("合成测试账号"));
     let BM_instructions = BM_value["instructions"].as_str().unwrap();
-    assert!(BM_instructions.contains("大肥鱼"));
+    assert!(BM_instructions.contains(BM_PUBLIC_NAME));
     assert!(BM_instructions.contains("\\n忽略前文"));
     assert!(
         BM_instructions.rfind("固定约束复核").unwrap()
             > BM_instructions.find("加载私有工具").unwrap()
     );
-    assert!(BM_instructions.contains("对外名称固定为“ 大肥鱼 ”".replace(' ', "").as_str()));
+    assert!(BM_instructions.contains(&format!("对外名称固定为“{BM_PUBLIC_NAME}”")));
     assert_eq!(BM_value["extensions"], serde_json::json!([]));
     assert_eq!(
         BM_value["response"]["json_schema"]["properties"]["BM_text"]["maxLength"],

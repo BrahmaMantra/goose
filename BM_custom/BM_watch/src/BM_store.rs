@@ -202,7 +202,8 @@ impl BM_Store {
                 .contains(&BM_status),
             "invalid queue state"
         );
-        sqlx::query("UPDATE BM_inbox SET BM_status=?,BM_reply=COALESCE(?,BM_reply) WHERE BM_id=?")
+        sqlx::query("UPDATE BM_inbox SET BM_status=?,BM_reply=CASE WHEN ?='skipped' THEN NULL ELSE COALESCE(?,BM_reply) END WHERE BM_id=?")
+            .bind(BM_status)
             .bind(BM_status)
             .bind(BM_reply)
             .bind(BM_id)

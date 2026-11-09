@@ -302,3 +302,52 @@ fn BM_legacy_rules_use_deny_semantics_and_default_marker() {
     );
     BM_rules.BM_validate().unwrap();
 }
+
+#[tokio::test]
+async fn BM_no_reply_decision_skips_without_publishing_reason_as_reply() {
+    struct BM_NoReply;
+    #[async_trait]
+    impl BM_Generator for BM_NoReply {
+        async fn BM_generate(
+            &self,
+            _BM_message: &BM_Comment,
+            _BM_cancel: CancellationToken,
+        ) -> Result<BM_Decision> {
+            Ok(BM_Decision {
+                BM_send: false,
+                BM_text: "不需要回复的内部判断理由".into(),
+            })
+        }
+    }
+    let BM_temp = tempfile::tempdir().unwrap();
+    let BM_store = BM_Store::BM_open(&BM_temp.path().join("BM_queue.sqlite"))
+        .await
+        .unwrap();
+    let BM_fixture = Arc::new(BM_Fixture {
+        BM_calls: AtomicUsize::new(0),
+        BM_replies: Mutex::new(vec![]),
+        BM_sent_texts: Mutex::new(vec![]),
+        BM_fail: false,
+    });
+    let mut BM_worker = BM_make_worker(BM_store.clone(), BM_fixture.clone());
+    BM_worker.BM_generator = Arc::new(BM_NoReply);
+    BM_worker.BM_rules.BM_deny_contains.clear();
+    BM_store
+        .BM_enqueue(&BM_message("BM_no_reply"))
+        .await
+        .unwrap();
+    let BM_id = BM_store.BM_records(None).await.unwrap()[0].BM_id;
+    BM_store
+        .BM_finish(BM_id, "queued", Some("旧候选回复"))
+        .await
+        .unwrap();
+    BM_worker.BM_pause(true).await.unwrap();
+    BM_worker
+        .BM_batch(1, CancellationToken::new())
+        .await
+        .unwrap();
+    let BM_rows = BM_store.BM_records(None).await.unwrap();
+    assert_eq!(BM_rows[0].BM_status, "skipped");
+    assert!(BM_rows[0].BM_reply.is_none());
+    assert!(BM_fixture.BM_sent_texts.lock().await.is_empty());
+}

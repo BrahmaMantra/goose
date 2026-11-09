@@ -152,9 +152,12 @@ impl BM_Worker {
                     continue;
                 }
             };
+            if !BM_decision.BM_send {
+                self.BM_store.BM_finish(BM_id, "skipped", None).await?;
+                continue;
+            }
             let BM_reply = self.BM_rules.BM_mark_reply(&BM_decision.BM_text);
             if !self.BM_platform.BM_write_ready()
-                || !BM_decision.BM_send
                 || BM_reply.is_empty()
                 || BM_reply.chars().count() > self.BM_rules.BM_max_reply_chars
             {

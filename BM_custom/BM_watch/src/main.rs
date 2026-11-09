@@ -131,10 +131,16 @@ fn BM_main() -> Result<()> {
 
 async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf, BM_config_file: PathBuf) -> Result<()> {
     let BM_store = BM_Store::BM_open(&BM_root.join("BM_queue.sqlite")).await?;
+    let BM_reply_budget = BM_config.BM_rules.BM_max_reply_chars
+        - BM_config.BM_rules.BM_reply_marker.chars().count()
+        - 1;
     let BM_worker = Arc::new(BM_Worker {
         BM_store,
         BM_rules: BM_config.BM_rules,
-        BM_generator: Arc::new(BM_GooseRuntime::BM_new(BM_root.clone())),
+        BM_generator: Arc::new(BM_GooseRuntime::BM_with_reply_budget(
+            BM_root.clone(),
+            BM_reply_budget,
+        )),
         BM_platform: Arc::new(BM_NoWrites),
         BM_gate: tokio::sync::Mutex::new(()),
     });

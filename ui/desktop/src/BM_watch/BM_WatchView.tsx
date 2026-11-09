@@ -19,7 +19,7 @@ const BM_sourceLabels: Record<string, string> = {
 const BM_labels: Record<string, string> = {
   queued: '待处理',
   processing: '处理中',
-  review: '待审核',
+  review: '候选回复',
   skipped: '已跳过',
   failed: '失败',
   sending: '提交中',

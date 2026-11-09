@@ -7,3 +7,5 @@ pub mod BM_worker;
 pub mod BM_service;
 
 pub mod BM_source;
+
+pub mod BM_prompt;

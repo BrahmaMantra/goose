@@ -7,7 +7,17 @@ import { createInterface } from 'node:readline';
 import { z } from 'zod';
 import { BM_readAccountScript, BM_allowedLoginUrl, BM_creatorUrl } from './BM_login';
 import { BM_privateDirectory, BM_accountSchema } from './BM_privateConfig';
-import { BM_rulesSchema } from './BM_types';
+import { BM_rulesSchema, BM_validReply } from './BM_types';
+import {
+  BM_delivery,
+  BM_sendRequestSchema,
+  BM_replyRoute,
+  BM_matchReplyRequest,
+  BM_parseReplyReceipt,
+  BM_replyPageScript,
+  type BM_SendRequest,
+  type BM_Delivery,
+} from './BM_commentSend';
 import {
   BM_commentRequest,
   BM_parseCommentPage,
@@ -80,13 +90,38 @@ export async function BM_runCommentReader(): Promise<void> {
     );
     BM_session.setPermissionCheckHandler(() => false);
     BM_session.on('will-download', (BM_event) => BM_event.preventDefault());
-    BM_session.webRequest.onBeforeRequest(
-      { urls: ['https://creator.douyin.com/*'] },
-      (BM_details, BM_callback) => {
-        const BM_path = new URL(BM_details.url).pathname;
-        BM_callback({ cancel: BM_path.includes('/comment/') && BM_details.method !== 'GET' });
+    let BM_sending: {
+      BM_request: BM_SendRequest;
+      BM_itemIds: Set<string>;
+      BM_attempted: boolean;
+      BM_networkId?: string;
+      BM_result?: BM_Delivery;
+      BM_rejected: boolean;
+    } | null = null;
+    BM_session.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (BM_details, BM_callback) => {
+      const BM_path = new URL(BM_details.url).pathname;
+      if (!BM_path.includes('/comment/') || BM_details.method === 'GET') {
+        BM_callback({ cancel: false });
+        return;
       }
-    );
+      const BM_attempt = BM_sending;
+      const BM_body = (BM_details.uploadData ?? [])
+        .map((BM_part) => BM_part.bytes?.toString('utf8') ?? '')
+        .join('');
+      const BM_allowed =
+        !!BM_attempt &&
+        !BM_attempt.BM_attempted &&
+        BM_matchReplyRequest(
+          BM_details.url,
+          BM_details.method,
+          BM_body,
+          BM_attempt.BM_request,
+          BM_attempt.BM_itemIds
+        );
+      if (BM_allowed) BM_attempt!.BM_attempted = true;
+      else if (BM_attempt) BM_attempt.BM_rejected = true;
+      BM_callback({ cancel: !BM_allowed });
+    });
     // Session cookies need an explicit private snapshot to survive browser/session restarts.
     try {
       const BM_cookies = z
@@ -191,6 +226,47 @@ export async function BM_runCommentReader(): Promise<void> {
       BM_itemIds: Set<string>;
     } | null = null;
     BM_view.webContents.debugger.on('message', (_BM_event, BM_method, BM_params) => {
+      const BM_attempt = BM_sending;
+      if (BM_attempt) {
+        if (
+          BM_method === 'Network.requestWillBeSent' &&
+          BM_params.request.method === 'POST' &&
+          BM_replyRoute(BM_params.request.url)
+        ) {
+          BM_attempt.BM_networkId = BM_params.requestId;
+        }
+        if (
+          BM_params.requestId === BM_attempt.BM_networkId &&
+          BM_method === 'Network.loadingFailed'
+        )
+          BM_attempt.BM_result = BM_delivery('unknown', 'BM_transport_unknown');
+        if (
+          BM_params.requestId === BM_attempt.BM_networkId &&
+          BM_method === 'Network.loadingFinished'
+        ) {
+          void BM_view.webContents.debugger
+            .sendCommand('Network.getResponseBody', { requestId: BM_params.requestId })
+            .then((BM_body) => {
+              if (BM_sending !== BM_attempt) return;
+              const BM_text = BM_body.base64Encoded
+                ? Buffer.from(BM_body.body, 'base64').toString()
+                : BM_body.body;
+              if (Buffer.byteLength(BM_text) > 1024 * 1024) throw new Error('BM_receipt_too_large');
+              void fs
+                .writeFile(path.join(BM_data, 'BM_reply_receipt.local.json'), BM_text, {
+                  mode: 0o600,
+                })
+                .catch(() => undefined);
+              BM_attempt.BM_result = BM_parseReplyReceipt(
+                JSON.parse(BM_text),
+                BM_attempt.BM_request
+              );
+            })
+            .catch(() => {
+              BM_attempt.BM_result = BM_delivery('unknown', 'BM_receipt_invalid');
+            });
+        }
+      }
       const BM_batch = BM_current;
       if (!BM_batch) return;
       if (
@@ -273,7 +349,7 @@ export async function BM_runCommentReader(): Promise<void> {
           BM_batch.BM_failed = true;
         });
     });
-    const BM_poll = async (BM_input: unknown) => {
+    const BM_poll = async (BM_input: unknown, BM_keepPage = false) => {
       const BM_request = z
         .object({ BM_work: z.string().regex(/^\d{5,30}$/) })
         .strict()
@@ -383,6 +459,12 @@ export async function BM_runCommentReader(): Promise<void> {
         if (BM_batch.BM_pages.length === BM_count || BM_batch.BM_failed) break;
       }
       const BM_complete = !BM_batch.BM_failed && !BM_batch.BM_pages.at(-1)!.BM_has_more;
+      if (BM_keepPage)
+        return {
+          BM_state: BM_complete ? 'ready' : 'partial',
+          BM_comments: [...BM_comments.values()],
+          BM_complete,
+        };
       // Recheck identity before handing any observed data to the business queue.
       BM_current = null;
       BM_stage = 'account_recheck';
@@ -402,14 +484,87 @@ export async function BM_runCommentReader(): Promise<void> {
         BM_complete,
       };
     };
+    const BM_send = async (BM_input: unknown): Promise<BM_Delivery> => {
+      const BM_request = BM_sendRequestSchema.parse(BM_input);
+      if (
+        !BM_config.BM_rules.BM_works.includes(BM_request.BM_message.BM_work) ||
+        BM_request.BM_message.BM_account !== BM_config.BM_rules.BM_account
+      )
+        return BM_delivery('blocked', 'BM_target_mismatch');
+      if (
+        !BM_validReply(BM_request.BM_reply, BM_config.BM_rules.BM_max_reply_chars) ||
+        BM_request.BM_reply.length > 500
+      )
+        return BM_delivery('blocked', 'BM_reply_invalid');
+      const BM_page = await BM_poll({ BM_work: BM_request.BM_message.BM_work }, true);
+      if (!['ready', 'partial'].includes(BM_page.BM_state))
+        return BM_delivery('blocked', 'BM_' + BM_page.BM_state);
+      const BM_found = BM_page.BM_comments.filter(
+        (BM_comment) =>
+          BM_comment.BM_comment === BM_request.BM_message.BM_comment &&
+          BM_comment.BM_text === BM_request.BM_message.BM_text &&
+          BM_comment.BM_author === BM_request.BM_message.BM_author
+      );
+      if (BM_found.length !== 1) return BM_delivery('blocked', 'BM_comment_unavailable');
+      const BM_itemIds = BM_current!.BM_itemIds;
+      for (const BM_action of ['open', 'fill'] as const) {
+        if (
+          !(await BM_timeout(
+            BM_view.webContents.executeJavaScript(
+              BM_replyPageScript(BM_request, BM_itemIds, BM_action),
+              true
+            )
+          ))
+        )
+          return BM_delivery('blocked', 'BM_reply_control_unavailable');
+        await BM_wait(250);
+      }
+      const BM_attempt = {
+        BM_request,
+        BM_itemIds,
+        BM_attempted: false,
+        BM_rejected: false,
+      } as NonNullable<typeof BM_sending>;
+      BM_sending = BM_attempt;
+      try {
+        if (
+          !(await BM_timeout(
+            BM_view.webContents.executeJavaScript(
+              BM_replyPageScript(BM_request, BM_itemIds, 'submit'),
+              true
+            )
+          ))
+        )
+          return BM_delivery('blocked', 'BM_reply_control_unavailable');
+        const BM_deadline = Date.now() + 15000;
+        while (!BM_attempt.BM_result && !BM_attempt.BM_rejected && Date.now() < BM_deadline)
+          await BM_wait(100);
+        if (BM_attempt.BM_result) return BM_attempt.BM_result;
+        if (!BM_attempt.BM_attempted)
+          return BM_delivery(
+            'blocked',
+            BM_attempt.BM_rejected ? 'BM_request_mismatch' : 'BM_no_submission'
+          );
+        return BM_delivery('unknown', 'BM_receipt_timeout');
+      } catch {
+        return BM_delivery(BM_attempt.BM_attempted ? 'unknown' : 'blocked', 'BM_transport_unknown');
+      } finally {
+        BM_sending = null;
+        BM_current = null;
+      }
+    };
     process.stdout.write(
       JSON.stringify({ BM_state: 'booted', BM_comments: [], BM_complete: false }) + '\n'
     );
     const BM_lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
     for await (const BM_line of BM_lines) {
+      let BM_isSend = false;
       try {
-        if (BM_line.length > 2048) throw new Error('BM_request_too_large');
-        const BM_result = await BM_poll(JSON.parse(BM_line));
+        if (BM_line.length > 24000) throw new Error('BM_request_too_large');
+        const BM_input = JSON.parse(BM_line);
+        BM_isSend = BM_input?.BM_action === 'send';
+        const BM_result =
+          BM_input?.BM_action === 'send' ? await BM_send(BM_input) : await BM_poll(BM_input);
         process.stdout.write(JSON.stringify(BM_result) + '\n');
       } catch {
         BM_current = null;
@@ -419,8 +574,11 @@ export async function BM_runCommentReader(): Promise<void> {
           BM_view.focus();
         }
         process.stdout.write(
-          JSON.stringify({ BM_state: 'page_unavailable', BM_comments: [], BM_complete: false }) +
-            '\n'
+          JSON.stringify(
+            BM_isSend
+              ? BM_delivery('blocked', 'BM_page_unavailable')
+              : { BM_state: 'page_unavailable', BM_comments: [], BM_complete: false }
+          ) + '\n'
         );
       }
     }

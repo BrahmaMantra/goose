@@ -56,7 +56,7 @@ async fn BM_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(
-        json!({"BM_rules":BM_rules,"BM_interval_seconds":BM_state.BM_interval_seconds}),
+        json!({"BM_rules":BM_rules,"BM_interval_seconds":BM_state.BM_interval_seconds,"BM_write_ready":BM_state.BM_worker.BM_platform.BM_write_ready()}),
     ))
 }
 

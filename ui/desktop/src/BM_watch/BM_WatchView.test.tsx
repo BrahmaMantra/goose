@@ -9,6 +9,7 @@ beforeEach(() => {
     BM_auto_review: false,
     BM_config_name: 'BM_watch.local.json',
     BM_running: true,
+    BM_write_ready: false,
     BM_enabled: true,
     BM_counts: { review: 1 },
     BM_pid: 123,
@@ -67,7 +68,7 @@ describe('BM watch desktop page', () => {
     await screen.findByRole('button', { name: '开始值守' });
     fireEvent.click(screen.getByRole('button', { name: '跳过' }));
     await waitFor(() => expect(window.electron.BM_watchSkip).toHaveBeenCalledWith(1));
-    expect(screen.getByText(/发送端仍关闭/)).toBeInTheDocument();
+    expect(screen.getByText(/发送功能未启用，已批准回复不会发送/)).toBeInTheDocument();
   });
   it('shows saved configurations in the page and binds the clicked entry', async () => {
     BM_snapshot = { ...BM_snapshot, BM_running: false, BM_enabled: false };
@@ -139,6 +140,7 @@ it('shows approved replies as waiting for sending and permits withdrawal', async
         BM_text: 'BM hello',
         BM_is_ai_reply: false,
       },
+      BM_delivery: null,
       BM_review: {
         BM_actor: 'auto',
         BM_at: 1,

@@ -15,7 +15,7 @@ watch-build:
 watch-test:
     cd "{{repo_dir}}" && bin/cargo test -p bm-douyin-api -p bm-watch --tests
 
-[doc('前台启动单进程评论后台；需私有配置；启用消费后匹配规则的消息会调用配置的 LLM，真实平台发送仍禁用')]
+[doc('前台启动单进程评论后台；需私有配置；启用消费后调用配置的 LLM；浏览器适配器仅发送已批准回复')]
 watch-start config:
     "{{repo_dir}}/target/debug/BM_watch" --config {{quote(config)}}
 

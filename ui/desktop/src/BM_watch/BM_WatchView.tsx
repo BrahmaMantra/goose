@@ -35,6 +35,7 @@ const BM_labels: Record<string, string> = {
   sending: '提交中',
   accepted: '平台已接受',
   unknown: '结果未知',
+  rejected: '平台拒绝',
 };
 
 const BM_reviewReasons: Record<string, string> = {
@@ -51,6 +52,25 @@ const BM_reviewReasons: Record<string, string> = {
   policy_changed: '自动审核已关闭，撤回自动批准',
   manual_approved: '管理员已批准当前正文',
   manual_rejected: '管理员已跳过',
+};
+
+const BM_deliveryMessages: Record<string, string> = {
+  BM_platform_accepted: '平台已接受提交',
+  BM_platform_rejected: '平台明确拒绝回复',
+  BM_login_required: '需要在官方窗口重新扫码登录',
+  BM_account_mismatch: '扫码账号与配置不一致',
+  BM_page_unavailable: '官方页面暂不可用',
+  BM_browser_unavailable: '浏览器适配器未就绪',
+  BM_comment_unavailable: '原评论已变化或未在当前读取范围内',
+  BM_target_mismatch: '目标与配置不一致，已阻止',
+  BM_reply_invalid: '回复超过限制或格式不符合要求',
+  BM_reply_control_unavailable: '官方回复控件不可用',
+  BM_request_mismatch: '页面提交目标或正文不匹配，已阻止',
+  BM_no_submission: '页面未发起回复提交',
+  BM_receipt_invalid: '无法识别回执，请在抖音核对',
+  BM_receipt_mismatch: '回执内容不匹配，请在抖音核对',
+  BM_receipt_timeout: '提交后未收到回执，请在抖音核对',
+  BM_transport_unknown: '连接中断，请在抖音核对',
 };
 
 export default function BM_WatchView() {
@@ -314,7 +334,14 @@ export default function BM_WatchView() {
                 `；最近读取 ${BM_snapshot.BM_source.BM_seen} 条，新增入队 ${BM_snapshot.BM_source.BM_added} 条`}
             </p>
             <p className="text-sm text-text-secondary">
-              关闭窗口后，已经启动的后台会继续运行。桌面启动的后台会通过官方创作者页面读取所选作品评论并生成候选回复；发送端仍关闭，不会自动发送评论。
+              发送状态：
+              {BM_snapshot?.BM_write_ready
+                ? '发送端已启用；只提交已批准回复'
+                : '发送功能未启用，已批准回复不会发送'}
+              。
+            </p>
+            <p className="text-sm text-text-secondary">
+              关闭窗口后，已经启动的后台会继续运行。后台通过官方创作者页面读取评论；值守运行中且发送端已启用时，才提交已批准正文。
             </p>
           </section>
           {BM_configs !== null && (
@@ -401,7 +428,9 @@ export default function BM_WatchView() {
                     作品 {BM_record.BM_message.BM_work} · 评论 {BM_record.BM_message.BM_comment}
                   </span>
                   <span className="shrink-0">
-                    {BM_labels[BM_record.BM_status] || BM_record.BM_status}
+                    {BM_record.BM_status === 'approved' && !BM_snapshot?.BM_write_ready
+                      ? '已批准，发送功能未启用'
+                      : BM_labels[BM_record.BM_status] || BM_record.BM_status}
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap break-words">{BM_record.BM_message.BM_text}</p>
@@ -410,6 +439,14 @@ export default function BM_WatchView() {
                     <p className="mb-1 text-xs text-text-secondary">候选回复</p>
                     <p className="whitespace-pre-wrap break-words">{BM_record.BM_reply}</p>
                   </div>
+                )}
+                {BM_record.BM_delivery && (
+                  <p className="text-sm text-text-secondary">
+                    发送回执：
+                    {BM_deliveryMessages[BM_record.BM_delivery.BM_code] ??
+                      '请核对官方页面的提交结果'}
+                    {BM_record.BM_delivery.BM_reply_id ? '；已记录平台回复 ID' : ''}
+                  </p>
                 )}
                 {BM_record.BM_review && (
                   <p className="text-sm text-text-secondary">
@@ -435,7 +472,7 @@ export default function BM_WatchView() {
                     批准此回复
                   </Button>
                 )}
-                {['review', 'failed', 'approved'].includes(BM_record.BM_status) && (
+                {['review', 'failed', 'approved', 'rejected'].includes(BM_record.BM_status) && (
                   <Button
                     variant="outline"
                     disabled={BM_busy}

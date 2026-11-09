@@ -31,6 +31,7 @@ pub struct BM_Record {
     pub BM_message: BM_Comment,
     pub BM_reply: Option<String>,
     pub BM_review: Option<BM_ReviewAudit>,
+    pub BM_delivery: Option<crate::BM_delivery::BM_Delivery>,
 }
 
 impl BM_Store {
@@ -60,7 +61,7 @@ impl BM_Store {
     }
     pub async fn BM_records(&self, BM_before: Option<i64>) -> Result<Vec<BM_Record>> {
         ensure!(BM_before.is_none_or(|BM_id| BM_id > 0), "invalid cursor");
-        let BM_rows = sqlx::query("SELECT BM_id,BM_status,BM_payload,BM_reply,(SELECT BM_audit FROM BM_reviews WHERE BM_record=BM_inbox.BM_id ORDER BY BM_id DESC LIMIT 1) AS BM_audit FROM BM_inbox WHERE (? IS NULL OR BM_id < ?) ORDER BY BM_id DESC LIMIT 50")
+        let BM_rows = sqlx::query("SELECT BM_id,BM_status,BM_payload,BM_reply,(SELECT BM_audit FROM BM_reviews WHERE BM_record=BM_inbox.BM_id ORDER BY BM_id DESC LIMIT 1) AS BM_audit,(SELECT BM_receipt FROM BM_deliveries WHERE BM_record=BM_inbox.BM_id ORDER BY BM_id DESC LIMIT 1) AS BM_receipt FROM BM_inbox WHERE (? IS NULL OR BM_id < ?) ORDER BY BM_id DESC LIMIT 50")
             .bind(BM_before).bind(BM_before).fetch_all(&self.BM_pool).await?;
         BM_rows
             .into_iter()
@@ -70,6 +71,10 @@ impl BM_Store {
                     BM_status: BM_row.get("BM_status"),
                     BM_message: serde_json::from_str(BM_row.get::<&str, _>("BM_payload"))?,
                     BM_reply: BM_row.get("BM_reply"),
+                    BM_delivery: BM_row
+                        .get::<Option<&str>, _>("BM_receipt")
+                        .map(serde_json::from_str)
+                        .transpose()?,
                     BM_review: BM_row
                         .get::<Option<&str>, _>("BM_audit")
                         .map(serde_json::from_str)
@@ -82,7 +87,7 @@ impl BM_Store {
     pub async fn BM_skip(&self, BM_id: i64) -> Result<bool> {
         ensure!(BM_id > 0, "invalid record reference");
         let mut BM_tx = self.BM_pool.begin().await?;
-        let BM_result = sqlx::query("UPDATE BM_inbox SET BM_status='skipped' WHERE BM_id=? AND BM_status IN ('review','failed','approved')")
+        let BM_result = sqlx::query("UPDATE BM_inbox SET BM_status='skipped' WHERE BM_id=? AND BM_status IN ('review','failed','approved','rejected')")
             .bind(BM_id).execute(&mut *BM_tx).await?;
         if BM_result.rows_affected() == 1 {
             let BM_audit = BM_ReviewAudit::BM_new(
@@ -199,6 +204,27 @@ impl BM_Store {
             .bind(BM_id).bind(BM_reply).execute(&self.BM_pool).await?;
         Ok(BM_result.rows_affected() == 1)
     }
+    pub async fn BM_finish_delivery(
+        &self,
+        BM_id: i64,
+        BM_delivery: &crate::BM_delivery::BM_Delivery,
+    ) -> Result<()> {
+        let mut BM_tx = self.BM_pool.begin().await?;
+        let BM_result =
+            sqlx::query("UPDATE BM_inbox SET BM_status=? WHERE BM_id=? AND BM_status='sending'")
+                .bind(BM_delivery.BM_queue_state())
+                .bind(BM_id)
+                .execute(&mut *BM_tx)
+                .await?;
+        ensure!(BM_result.rows_affected() == 1, "delivery state changed");
+        sqlx::query("INSERT INTO BM_deliveries(BM_record,BM_receipt) VALUES(?,?)")
+            .bind(BM_id)
+            .bind(serde_json::to_string(BM_delivery)?)
+            .execute(&mut *BM_tx)
+            .await?;
+        BM_tx.commit().await?;
+        Ok(())
+    }
     pub async fn BM_open(BM_path: &Path) -> Result<Self> {
         let BM_file = std::fs::OpenOptions::new()
             .write(true)
@@ -221,6 +247,12 @@ impl BM_Store {
             )
             .await?;
         sqlx::query("CREATE TABLE IF NOT EXISTS BM_inbox (BM_id INTEGER PRIMARY KEY, BM_account TEXT NOT NULL, BM_work TEXT NOT NULL, BM_comment TEXT NOT NULL, BM_payload TEXT NOT NULL, BM_status TEXT NOT NULL DEFAULT 'queued', BM_reply TEXT, UNIQUE(BM_account,BM_work,BM_comment))").execute(&BM_pool).await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS BM_deliveries (BM_id INTEGER PRIMARY KEY, BM_record INTEGER NOT NULL, BM_receipt TEXT NOT NULL)").execute(&BM_pool).await?;
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS BM_deliveries_record ON BM_deliveries(BM_record,BM_id)",
+        )
+        .execute(&BM_pool)
+        .await?;
         sqlx::query("CREATE TABLE IF NOT EXISTS BM_reviews (BM_id INTEGER PRIMARY KEY, BM_record INTEGER NOT NULL, BM_audit TEXT NOT NULL, BM_reply TEXT)").execute(&BM_pool).await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS BM_reviews_record ON BM_reviews(BM_record,BM_id)")
             .execute(&BM_pool)

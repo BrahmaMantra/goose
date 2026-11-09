@@ -24,6 +24,7 @@ struct BM_Fixture {
     BM_review_continue: Notify,
     BM_block: bool,
     BM_reply: String,
+    BM_delivery: Option<bm_watch::BM_delivery::BM_Delivery>,
 }
 impl BM_Fixture {
     fn BM_new(BM_risk: BM_Risk) -> Self {
@@ -38,6 +39,7 @@ impl BM_Fixture {
             BM_review_continue: Notify::new(),
             BM_block: false,
             BM_reply: "你好，收到你的留言啦！".into(),
+            BM_delivery: None,
         }
     }
 }
@@ -83,6 +85,17 @@ impl BM_Reviewer for BM_Fixture {
 impl BM_CommentPlatform for BM_Fixture {
     fn BM_write_ready(&self) -> bool {
         self.BM_ready.load(Ordering::SeqCst)
+    }
+    async fn BM_deliver(
+        &self,
+        BM_message: &BM_Comment,
+        BM_reply: &str,
+    ) -> bm_watch::BM_delivery::BM_Delivery {
+        if let Some(BM_delivery) = &self.BM_delivery {
+            return BM_delivery.clone();
+        }
+        self.BM_submit(BM_message, BM_reply).await.unwrap();
+        bm_watch::BM_delivery::BM_Delivery::BM_new("accepted", "BM_platform_accepted")
     }
     async fn BM_submit(&self, _BM_message: &BM_Comment, BM_reply: &str) -> Result<()> {
         self.BM_sent.lock().await.push(BM_reply.into());
@@ -322,4 +335,44 @@ async fn BM_policy_change_during_review_invalidates_the_inflight_approval() {
         .await
         .unwrap();
     assert_eq!(BM_worker.BM_store.BM_counts().await.unwrap()["review"], 1);
+}
+
+#[tokio::test]
+async fn BM_delivery_failures_persist_without_automatic_resubmission() {
+    for (BM_result, BM_state) in [
+        ("blocked", "review"),
+        ("rejected", "rejected"),
+        ("unknown", "unknown"),
+    ] {
+        let BM_temp = tempfile::tempdir().unwrap();
+        let BM_path = BM_temp.path().join("BM_queue.sqlite");
+        let mut BM_fixture = BM_Fixture::BM_new(BM_Risk::Low);
+        BM_fixture.BM_delivery = Some(bm_watch::BM_delivery::BM_Delivery::BM_new(
+            BM_result,
+            "BM_synthetic_receipt",
+        ));
+        BM_fixture.BM_ready.store(true, Ordering::SeqCst);
+        let BM_fixture = Arc::new(BM_fixture);
+        let BM_worker = BM_setup(&BM_path, BM_fixture.clone()).await;
+        BM_worker.BM_set_auto_review(true).await.unwrap();
+        BM_enqueue(&BM_worker, "BM_1", "你好").await;
+        BM_worker
+            .BM_batch(2, CancellationToken::new())
+            .await
+            .unwrap();
+        let BM_restarted = BM_setup(&BM_path, BM_fixture.clone()).await;
+        BM_restarted
+            .BM_batch(2, CancellationToken::new())
+            .await
+            .unwrap();
+        let BM_record = BM_restarted
+            .BM_store
+            .BM_records(None)
+            .await
+            .unwrap()
+            .remove(0);
+        assert_eq!(BM_record.BM_status, BM_state);
+        assert_eq!(BM_record.BM_delivery.unwrap().BM_state, BM_result);
+        assert_eq!(BM_fixture.BM_generated.load(Ordering::SeqCst), 1);
+    }
 }

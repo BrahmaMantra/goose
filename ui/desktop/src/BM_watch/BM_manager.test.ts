@@ -69,6 +69,7 @@ beforeEach(async () => {
             }
           : { ...BM_rules, BM_auto_review: BM_autoReview },
         BM_interval_seconds: 30,
+        BM_write_ready: false,
       };
     if (BM_request.url?.startsWith('/BM/records')) BM_value = { BM_records: [] };
     if (BM_request.url === '/BM/pause') {

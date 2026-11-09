@@ -92,6 +92,17 @@ pub trait BM_CommentPlatform: Send + Sync {
         true
     }
     async fn BM_submit(&self, BM_message: &BM_Comment, BM_text: &str) -> Result<()>;
+    async fn BM_deliver(
+        &self,
+        BM_message: &BM_Comment,
+        BM_text: &str,
+    ) -> crate::BM_delivery::BM_Delivery {
+        if self.BM_submit(BM_message, BM_text).await.is_ok() {
+            crate::BM_delivery::BM_Delivery::BM_new("accepted", "BM_platform_accepted")
+        } else {
+            crate::BM_delivery::BM_Delivery::BM_new("unknown", "BM_transport_unknown")
+        }
+    }
 }
 
 pub struct BM_Worker {
@@ -155,18 +166,8 @@ impl BM_Worker {
         if !self.BM_store.BM_begin_send(BM_id, &BM_reply).await? {
             return Ok(true);
         }
-        // A failed submission may have reached the platform; never retry blindly.
-        let BM_status = if self
-            .BM_platform
-            .BM_submit(&BM_message, &BM_reply)
-            .await
-            .is_ok()
-        {
-            "accepted"
-        } else {
-            "unknown"
-        };
-        self.BM_store.BM_finish(BM_id, BM_status, None).await?;
+        let BM_result = self.BM_platform.BM_deliver(&BM_message, &BM_reply).await;
+        self.BM_store.BM_finish_delivery(BM_id, &BM_result).await?;
         Ok(true)
     }
 

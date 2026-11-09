@@ -141,22 +141,34 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf, BM_config_file: PathBu
         BM_root.clone(),
         BM_reply_budget,
     ));
-    let BM_worker = Arc::new(BM_Worker {
-        BM_store,
-        BM_rules: BM_config.BM_rules,
-        BM_generator: BM_runtime.clone(),
-        BM_reviewer: BM_runtime,
-        BM_platform: Arc::new(BM_NoWrites),
-        BM_gate: tokio::sync::Mutex::new(()),
-    });
-    let BM_cancel = CancellationToken::new();
-    let (BM_launch, BM_launch_failed) = match bm_watch::BM_source::BM_reader_launch(&BM_root) {
+    let (BM_launch, BM_launch_failed) = match bm_watch::BM_browser::BM_reader_launch(&BM_root) {
         Ok(BM_launch) => (BM_launch, false),
         Err(_) => (None, true),
     };
     let BM_has_browser = BM_root
         .parent()
         .is_some_and(|BM_profile| BM_profile.join("BM_browser").is_dir());
+    let BM_browser = BM_launch
+        .clone()
+        .filter(|_| BM_has_browser)
+        .map(|BM_launch| {
+            Arc::new(bm_watch::BM_browser::BM_Browser::BM_new(
+                BM_config_file,
+                BM_launch,
+            ))
+        });
+    let BM_worker = Arc::new(BM_Worker {
+        BM_store,
+        BM_rules: BM_config.BM_rules,
+        BM_generator: BM_runtime.clone(),
+        BM_reviewer: BM_runtime,
+        BM_platform: BM_browser
+            .clone()
+            .map(|BM_browser| BM_browser as Arc<dyn BM_CommentPlatform>)
+            .unwrap_or_else(|| Arc::new(BM_NoWrites)),
+        BM_gate: tokio::sync::Mutex::new(()),
+    });
+    let BM_cancel = CancellationToken::new();
     let BM_source_state = if BM_launch_failed {
         "reader_failed"
     } else if BM_launch.is_some() && BM_has_browser {
@@ -171,18 +183,15 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf, BM_config_file: PathBu
             ..Default::default()
         })
         .await?;
-    let BM_collector = if let Some(BM_launch) = BM_launch.filter(|_| BM_has_browser) {
-        Some(tokio::spawn(bm_watch::BM_source::BM_collect(
-            BM_config_file,
-            BM_launch,
+    let BM_collector = BM_browser.clone().map(|BM_browser| {
+        tokio::spawn(bm_watch::BM_source::BM_collect(
+            BM_browser,
             BM_worker.BM_store.clone(),
             BM_worker.BM_rules.clone(),
             BM_config.BM_interval_seconds,
             BM_cancel.clone(),
-        )))
-    } else {
-        None
-    };
+        ))
+    });
     let BM_service = Arc::new(BM_Service {
         BM_interval_seconds: BM_config.BM_interval_seconds,
         BM_cancel: BM_cancel.clone(),

@@ -12,6 +12,7 @@ export const BM_statusNames = [
   'sending',
   'accepted',
   'unknown',
+  'rejected',
 ] as const;
 export const BM_defaultReplyMarker = '【from DeepSeek-V4.1-Flash-1017】';
 export function BM_hasControlChars(BM_value: string): boolean {
@@ -69,7 +70,11 @@ export const BM_rulesSchema = z.preprocess(
     )
 );
 export const BM_taskSchema = z
-  .object({ BM_rules: BM_rulesSchema, BM_interval_seconds: z.number().int().positive() })
+  .object({
+    BM_rules: BM_rulesSchema,
+    BM_interval_seconds: z.number().int().positive(),
+    BM_write_ready: z.boolean().default(false),
+  })
   .strict();
 export const BM_statusSchema = z
   .object({
@@ -98,6 +103,15 @@ export const BM_recordSchema = z
         BM_is_ai_reply: z.boolean().default(false),
       })
       .strict(),
+    BM_delivery: z
+      .object({
+        BM_state: z.enum(['accepted', 'rejected', 'blocked', 'unknown']),
+        BM_code: z.string().max(100),
+        BM_reply_id: z.string().nullable(),
+      })
+      .strict()
+      .nullable()
+      .default(null),
     BM_reply: z.string().nullable(),
     BM_review: z
       .object({
@@ -137,6 +151,7 @@ export interface BM_Snapshot {
   BM_auto_review: boolean;
   BM_config_name: string;
   BM_running: boolean;
+  BM_write_ready: boolean;
   BM_enabled: boolean;
   BM_counts: Record<string, number>;
   BM_pid?: number;

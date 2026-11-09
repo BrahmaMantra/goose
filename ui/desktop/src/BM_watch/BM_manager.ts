@@ -274,6 +274,7 @@ export class BM_WatchManager {
       BM_auto_review: false,
       BM_config_name: '',
       BM_running: false,
+      BM_write_ready: false,
       BM_enabled: false,
       BM_counts: {},
       BM_account: '',
@@ -313,7 +314,8 @@ export class BM_WatchManager {
         const BM_requires_restart = !(
           'BM_deny_contains' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
           'BM_reply_marker' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
-          'BM_auto_review' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules
+          'BM_auto_review' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
+          'BM_write_ready' in (BM_taskRaw as Record<string, unknown>)
         );
         return {
           ...BM_base,
@@ -321,6 +323,7 @@ export class BM_WatchManager {
           ...BM_task.BM_rules,
           BM_interval_seconds: BM_task.BM_interval_seconds,
           BM_running: true,
+          BM_write_ready: BM_task.BM_write_ready,
           BM_requires_restart:
             BM_requires_restart ||
             (!!this.BM_readerLauncher && !BM_base.BM_source) ||

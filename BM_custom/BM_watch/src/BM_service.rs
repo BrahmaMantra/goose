@@ -240,12 +240,22 @@ async fn BM_source_status(
     BM_headers: HeaderMap,
 ) -> Result<Json<crate::BM_source::BM_SourceStatus>, StatusCode> {
     BM_authorize(&BM_headers, &BM_state)?;
-    Ok(Json(
-        BM_state
-            .BM_worker
-            .BM_store
-            .BM_source_status()
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
-    ))
+    let mut BM_status = BM_state
+        .BM_worker
+        .BM_store
+        .BM_source_status()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let BM_now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    if ["ready", "partial"].contains(&BM_status.BM_state.as_str())
+        && BM_status.BM_checked_at > 0
+        && BM_now.saturating_sub(BM_status.BM_checked_at)
+            > BM_state.BM_interval_seconds.saturating_add(150)
+    {
+        BM_status.BM_state = "stale".into();
+    }
+    Ok(Json(BM_status))
 }

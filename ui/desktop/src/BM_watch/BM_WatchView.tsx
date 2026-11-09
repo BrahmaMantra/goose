@@ -6,7 +6,9 @@ import type { BM_ConfigEntry, BM_Record, BM_Snapshot, BM_WatchAction } from './B
 import BM_CreateConfigView from './BM_CreateConfigView';
 
 const BM_sourceLabels: Record<string, string> = {
-  manual: '未接入自动读取',
+  manual: '未配置评论读取器',
+  starting: '正在启动评论读取器',
+  stale: '评论读取状态已超时，请检查或重启后台',
   paused: '读取已暂停，开始值守后继续读取',
   booted: '评论读取器已启动',
   ready: '官方页面评论读取成功',

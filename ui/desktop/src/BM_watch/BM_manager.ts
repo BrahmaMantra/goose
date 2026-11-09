@@ -398,6 +398,19 @@ export class BM_WatchManager {
       );
       if (((await BM_out.stat()).mode & 0o077) !== 0 || ((await BM_err.stat()).mode & 0o077) !== 0)
         throw new Error('日志文件必须为私有文件');
+      if (this.BM_readerLauncher) {
+        const BM_readerFile = path.join(BM_config.BM_data_dir, 'BM_reader.local.json');
+        const BM_readerTmp = `${BM_readerFile}.BM_${randomUUID()}`;
+        try {
+          await fs.writeFile(BM_readerTmp, JSON.stringify(this.BM_readerLauncher), {
+            mode: 0o600,
+            flag: 'wx',
+          });
+          await fs.rename(BM_readerTmp, BM_readerFile);
+        } finally {
+          await fs.rm(BM_readerTmp, { force: true });
+        }
+      }
       const BM_child = spawn(this.BM_binary, ['--config', BM_file], {
         detached: true,
         stdio: ['ignore', BM_out.fd, BM_err.fd],

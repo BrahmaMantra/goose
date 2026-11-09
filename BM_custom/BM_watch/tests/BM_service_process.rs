@@ -203,6 +203,26 @@ async fn BM_process_auth_batches_and_restart() {
         .status()
         .unwrap();
     assert!(!BM_second.success());
+    BM_store
+        .BM_set_source_status(&bm_watch::BM_source::BM_SourceStatus {
+            BM_state: "ready".into(),
+            BM_seen: 7,
+            BM_added: 1,
+            BM_complete: true,
+            BM_checked_at: 1,
+        })
+        .await
+        .unwrap();
+    let BM_stale: Value = BM_http
+        .get(format!("{BM_base}/BM/source"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_stale["BM_state"], "stale");
     assert!(BM_http
         .post(format!("{BM_base}/BM/shutdown"))
         .bearer_auth(BM_token)
@@ -229,6 +249,18 @@ async fn BM_process_auth_batches_and_restart() {
         .json()
         .await
         .unwrap();
+    let BM_source: Value = BM_http
+        .get(format!("{BM_base}/BM/source"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_source["BM_state"], "manual");
+    assert_eq!(BM_source["BM_seen"], 0);
+    assert_eq!(BM_source["BM_complete"], false);
     assert_eq!(BM_status["BM_enabled"], false);
     assert_eq!(BM_status["BM_counts"]["review"], 1);
     assert_eq!(BM_status["BM_counts"]["skipped"], 1);
@@ -265,12 +297,20 @@ for line in sys.stdin:
     let BM_token = "BM_synthetic_control_token_12345";
     std::fs::write(&BM_path,serde_json::to_vec(&json!({"BM_data_dir":BM_data,"BM_goose_root":BM_root,"BM_admin_token":BM_token,"BM_interval_seconds":1,"BM_batch_size":1,"BM_port":BM_port,"BM_rules":{"BM_account":"BM_owner","BM_works":["12345678"],"BM_deny_contains":["synthetic"],"BM_max_reply_chars":200}})).unwrap()).unwrap();
     std::fs::set_permissions(&BM_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let BM_reader_config = BM_data.join("BM_reader.local.json");
+    std::fs::write(
+        &BM_reader_config,
+        serde_json::to_vec(&json!({"BM_executable":"/usr/bin/python3","BM_app":BM_script}))
+            .unwrap(),
+    )
+    .unwrap();
+    std::fs::set_permissions(&BM_reader_config, std::fs::Permissions::from_mode(0o600)).unwrap();
     let mut BM_child = BM_Child(
         Command::new(env!("CARGO_BIN_EXE_BM_watch"))
             .arg("--config")
             .arg(&BM_path)
-            .env("BM_READER_EXECUTABLE", "/usr/bin/python3")
-            .env("BM_READER_APP", &BM_script)
+            .env_remove("BM_READER_EXECUTABLE")
+            .env_remove("BM_READER_APP")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

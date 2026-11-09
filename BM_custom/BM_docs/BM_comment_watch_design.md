@@ -2,7 +2,7 @@
 
 状态：已实现 Rust API library、常驻队列服务、进程内 Goose 适配、桌面管理、Electron IPC 与扫码创建私有配置；真实平台评论读写尚未完成。源码核查日期：2026-11-06。
 
-桌面扫码配置由 `BM_login` 管理官方网页窗口，`BM_privateConfig` 管理仓库外持久化，独立于 Rust 评论 API。新建账号使用独立浏览器目录，保存可见昵称与抖音号及值守规则；默认目录、取消清理和切换流程见 [桌面创建与账号切换](../BM_watch/BM_README.md#桌面创建与账号切换)。网页抖音号不等于 OpenAPI 身份，网页读取由 Rust `BM_source` 管理的长期 Electron 读取器接入，复用私有登录快照，读取所选作品的官方评论管理页面并去重入队。发送仍关闭；OpenAPI 资格和网页登录路线分别验证。
+桌面扫码配置由 `BM_login` 管理官方网页窗口，`BM_privateConfig` 管理仓库外持久化，独立于 Rust 评论 API。新建账号使用独立浏览器目录，保存可见昵称与抖音号及值守规则；默认目录、取消清理和切换流程见 [桌面创建与账号切换](../BM_watch/BM_README.md#桌面创建与账号切换)。网页抖音号不等于 OpenAPI 身份，网页读取由 Rust `BM_source` 管理的长期 Electron 读取器接入，复用私有登录快照和持久化的读取器启动配置，读取所选作品的官方评论管理页面并去重入队。发送仍关闭；OpenAPI 资格和网页登录路线分别验证。
 
 最新决定是使用 Rust 小型 API 封装，保持单个评论后台进程。当前入口与命令见 [BM_watch 使用说明](../BM_watch/BM_README.md)，API 状态见 [Rust API 分层](BM_douyin_api_design.md)。
 

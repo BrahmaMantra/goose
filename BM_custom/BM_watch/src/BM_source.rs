@@ -2,7 +2,9 @@ use crate::{BM_store::BM_Store, BM_worker::BM_Rules};
 use anyhow::{ensure, Result};
 use serde::{Deserialize, Serialize};
 use std::{
-    path::Path,
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
     process::Stdio,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -11,6 +13,44 @@ use tokio::{
     process::{Child, ChildStdin, ChildStdout, Command},
 };
 use tokio_util::sync::CancellationToken;
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BM_ReaderLaunch {
+    pub BM_executable: PathBuf,
+    pub BM_app: Option<PathBuf>,
+}
+pub fn BM_reader_launch(BM_data: &Path) -> Result<Option<BM_ReaderLaunch>> {
+    let BM_launch = if let Some(BM_executable) = std::env::var_os("BM_READER_EXECUTABLE") {
+        BM_ReaderLaunch {
+            BM_executable: BM_executable.into(),
+            BM_app: std::env::var_os("BM_READER_APP").map(Into::into),
+        }
+    } else {
+        let BM_file = BM_data.join("BM_reader.local.json");
+        match fs::symlink_metadata(&BM_file) {
+            Ok(BM_meta) => ensure!(
+                BM_meta.is_file()
+                    && !BM_meta.file_type().is_symlink()
+                    && BM_meta.permissions().mode() & 0o077 == 0
+                    && BM_meta.len() <= 8192,
+                "reader settings must be private"
+            ),
+            Err(BM_error) if BM_error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(BM_error) => return Err(BM_error.into()),
+        }
+        serde_json::from_slice::<BM_ReaderLaunch>(&fs::read(BM_file)?)?
+    };
+    ensure!(
+        BM_launch.BM_executable.is_absolute()
+            && BM_launch
+                .BM_app
+                .as_ref()
+                .is_none_or(|BM_app| BM_app.is_absolute()),
+        "reader settings must use absolute paths"
+    );
+    Ok(Some(BM_launch))
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,15 +85,9 @@ struct BM_Reader {
     BM_stdout: BufReader<ChildStdout>,
 }
 impl BM_Reader {
-    async fn BM_open(BM_config: &Path) -> Result<Self> {
-        let BM_executable = std::env::var_os("BM_READER_EXECUTABLE")
-            .ok_or_else(|| anyhow::anyhow!("reader unavailable"))?;
-        ensure!(
-            Path::new(&BM_executable).is_absolute(),
-            "reader executable must be absolute"
-        );
-        let mut BM_command = Command::new(BM_executable);
-        if let Some(BM_app) = std::env::var_os("BM_READER_APP") {
+    async fn BM_open(BM_config: &Path, BM_launch: &BM_ReaderLaunch) -> Result<Self> {
+        let mut BM_command = Command::new(&BM_launch.BM_executable);
+        if let Some(BM_app) = &BM_launch.BM_app {
             BM_command.arg(BM_app);
         }
         let mut BM_child = BM_command
@@ -151,6 +185,7 @@ pub async fn BM_ingest(
 
 pub async fn BM_collect(
     BM_config: std::path::PathBuf,
+    BM_launch: BM_ReaderLaunch,
     BM_store: BM_Store,
     BM_rules: BM_Rules,
     BM_interval: u64,
@@ -171,7 +206,7 @@ pub async fn BM_collect(
         for BM_work in &BM_rules.BM_works {
             let BM_poll = async {
                 if BM_reader.is_none() {
-                    BM_reader = Some(BM_Reader::BM_open(&BM_config).await?);
+                    BM_reader = Some(BM_Reader::BM_open(&BM_config, &BM_launch).await?);
                 }
                 BM_reader.as_mut().unwrap().BM_poll(BM_work).await
             };

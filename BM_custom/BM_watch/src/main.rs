@@ -145,13 +145,31 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf, BM_config_file: PathBu
         BM_gate: tokio::sync::Mutex::new(()),
     });
     let BM_cancel = CancellationToken::new();
-    let BM_collector = if std::env::var_os("BM_READER_EXECUTABLE").is_some()
-        && BM_root
-            .parent()
-            .is_some_and(|BM_profile| BM_profile.join("BM_browser").is_dir())
-    {
+    let (BM_launch, BM_launch_failed) = match bm_watch::BM_source::BM_reader_launch(&BM_root) {
+        Ok(BM_launch) => (BM_launch, false),
+        Err(_) => (None, true),
+    };
+    let BM_has_browser = BM_root
+        .parent()
+        .is_some_and(|BM_profile| BM_profile.join("BM_browser").is_dir());
+    let BM_source_state = if BM_launch_failed {
+        "reader_failed"
+    } else if BM_launch.is_some() && BM_has_browser {
+        "starting"
+    } else {
+        "manual"
+    };
+    BM_worker
+        .BM_store
+        .BM_set_source_status(&bm_watch::BM_source::BM_SourceStatus {
+            BM_state: BM_source_state.into(),
+            ..Default::default()
+        })
+        .await?;
+    let BM_collector = if let Some(BM_launch) = BM_launch.filter(|_| BM_has_browser) {
         Some(tokio::spawn(bm_watch::BM_source::BM_collect(
             BM_config_file,
+            BM_launch,
             BM_worker.BM_store.clone(),
             BM_worker.BM_rules.clone(),
             BM_config.BM_interval_seconds,

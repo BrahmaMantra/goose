@@ -122,6 +122,8 @@ export const BM_sourceStatusSchema = z
   .object({
     BM_state: z.enum([
       'manual',
+      'starting',
+      'stale',
       'paused',
       'booted',
       'ready',

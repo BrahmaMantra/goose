@@ -210,6 +210,7 @@ describe('BM desktop manager boundary', () => {
     await expect(BM_manager.BM_bind(BM_link)).rejects.toThrow();
   });
   it('reuses an existing service without spawning, and detaches exactly one cold start', async () => {
+    BM_manager = new BM_WatchManager(BM_binding, BM_binary, { BM_executable: BM_binary });
     await BM_manager.BM_bind(BM_file);
     await BM_manager.BM_action('start');
     expect(spawn).not.toHaveBeenCalled();
@@ -229,6 +230,11 @@ describe('BM desktop manager boundary', () => {
     expect(vi.mocked(spawn).mock.calls[0][0]).toBe(BM_binary);
     expect(vi.mocked(spawn).mock.calls[0][1]).toEqual(['--config', BM_file]);
     expect(vi.mocked(spawn).mock.calls[0][2]?.detached).toBe(true);
+    const BM_savedReader = path.join(BM_root, 'BM_data', 'BM_reader.local.json');
+    expect(JSON.parse(await fs.readFile(BM_savedReader, 'utf8'))).toEqual({
+      BM_executable: BM_binary,
+    });
+    expect((await fs.stat(BM_savedReader)).mode & 0o077).toBe(0);
     expect(BM_child.unref).toHaveBeenCalledOnce();
   });
 });

@@ -10,7 +10,20 @@ vi.mock('electron', () => ({
     fromPath: vi.fn((BM_path: string) => {
       const BM_session = {
         BM_path,
-        cookies: { flushStore: vi.fn(async () => undefined) },
+        cookies: {
+          flushStore: vi.fn(async () => undefined),
+          get: vi.fn(async () => [
+            {
+              name: 'BM_cookie',
+              value: 'BM_synthetic_value',
+              domain: '.douyin.com',
+              path: '/',
+              secure: true,
+              httpOnly: true,
+              sameSite: 'lax',
+            },
+          ]),
+        },
         flushStorageData: vi.fn(),
         clearStorageData: vi.fn(async () => undefined),
         setPermissionRequestHandler: vi.fn(),
@@ -133,6 +146,10 @@ it('isolates a sandboxed official login window and persists only after confirmed
     BM_deny_contains: [],
   });
   expect(JSON.parse(await fs.readFile(BM_file, 'utf8')).BM_rules.BM_account).toBe('BM_id');
+  const BM_data = JSON.parse(await fs.readFile(BM_file, 'utf8')).BM_data_dir;
+  const BM_cookieFile = path.join(path.dirname(BM_data), 'BM_cookies.local.json');
+  expect((await fs.stat(BM_cookieFile)).mode & 0o077).toBe(0);
+  expect(JSON.parse(await fs.readFile(BM_cookieFile, 'utf8'))[0].name).toBe('BM_cookie');
   expect(BM_session.cookies.flushStore).toHaveBeenCalled();
   expect(BM_session.clearStorageData).not.toHaveBeenCalled();
   expect(BM_window.isDestroyed()).toBe(true);

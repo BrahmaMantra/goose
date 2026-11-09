@@ -1,5 +1,6 @@
 import { BrowserWindow, session } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { BM_loginMessages, type BM_LoginCode, type BM_LoginResult } from './BM_loginStatus';
 import {
@@ -366,13 +367,25 @@ export class BM_Login {
         throw new Error('扫码窗口的账号已变化，请重新确认账号');
       await BM_value.BM_window.webContents.session.cookies.flushStore();
       BM_value.BM_window.webContents.session.flushStorageData();
-      const BM_file = await BM_saveConfig(
-        BM_value.BM_dir,
-        BM_gooseRoot,
-        BM_account,
-        BM_input,
-        BM_value.BM_root
+      const BM_cookies = (await BM_value.BM_window.webContents.session.cookies.get({})).filter(
+        (BM_cookie) =>
+          BM_cookie.domain === 'douyin.com' || BM_cookie.domain?.endsWith('.douyin.com')
       );
+      const BM_cookieFile = path.join(BM_value.BM_dir, 'BM_cookies.local.json');
+      await fs.writeFile(BM_cookieFile, JSON.stringify(BM_cookies), { mode: 0o600, flag: 'wx' });
+      let BM_file: string;
+      try {
+        BM_file = await BM_saveConfig(
+          BM_value.BM_dir,
+          BM_gooseRoot,
+          BM_account,
+          BM_input,
+          BM_value.BM_root
+        );
+      } catch (BM_error) {
+        await fs.rm(BM_cookieFile, { force: true });
+        throw BM_error;
+      }
       this.BM_pending = undefined;
       BM_value.BM_window.close();
       return BM_file;

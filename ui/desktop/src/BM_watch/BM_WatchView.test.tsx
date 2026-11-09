@@ -61,7 +61,7 @@ describe('BM watch desktop page', () => {
     await screen.findByRole('button', { name: '开始值守' });
     fireEvent.click(screen.getByRole('button', { name: '跳过' }));
     await waitFor(() => expect(window.electron.BM_watchSkip).toHaveBeenCalledWith(1));
-    expect(screen.getByText(/当前平台接入尚未完成/)).toBeInTheDocument();
+    expect(screen.getByText(/发送端仍关闭/)).toBeInTheDocument();
   });
   it('shows saved configurations in the page and binds the clicked entry', async () => {
     BM_snapshot = { ...BM_snapshot, BM_running: false, BM_enabled: false };

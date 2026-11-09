@@ -32,6 +32,25 @@ pub struct BM_Record {
 }
 
 impl BM_Store {
+    pub async fn BM_set_source_status(
+        &self,
+        BM_status: &crate::BM_source::BM_SourceStatus,
+    ) -> Result<()> {
+        sqlx::query("INSERT INTO BM_source(BM_id,BM_state) VALUES(1,?) ON CONFLICT(BM_id) DO UPDATE SET BM_state=excluded.BM_state")
+            .bind(serde_json::to_string(BM_status)?).execute(&self.BM_pool).await?;
+        Ok(())
+    }
+    pub async fn BM_source_status(&self) -> Result<crate::BM_source::BM_SourceStatus> {
+        let BM_state: Option<String> =
+            sqlx::query_scalar("SELECT BM_state FROM BM_source WHERE BM_id=1")
+                .fetch_optional(&self.BM_pool)
+                .await?;
+        Ok(match BM_state {
+            Some(BM_value) => serde_json::from_str(&BM_value)?,
+            None => Default::default(),
+        })
+    }
+
     pub async fn BM_is_recorded_reply(&self, BM_message: &BM_Comment) -> Result<bool> {
         Ok(sqlx::query_scalar::<_, i64>("SELECT EXISTS(SELECT 1 FROM BM_inbox WHERE BM_account=? AND BM_work=? AND BM_reply=? AND BM_status IN ('sending','accepted','unknown'))")
             .bind(&BM_message.BM_account).bind(&BM_message.BM_work).bind(BM_message.BM_text.trim())
@@ -82,6 +101,7 @@ impl BM_Store {
             )
             .await?;
         sqlx::query("CREATE TABLE IF NOT EXISTS BM_inbox (BM_id INTEGER PRIMARY KEY, BM_account TEXT NOT NULL, BM_work TEXT NOT NULL, BM_comment TEXT NOT NULL, BM_payload TEXT NOT NULL, BM_status TEXT NOT NULL DEFAULT 'queued', BM_reply TEXT, UNIQUE(BM_account,BM_work,BM_comment))").execute(&BM_pool).await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS BM_source (BM_id INTEGER PRIMARY KEY CHECK(BM_id=1), BM_state TEXT NOT NULL)").execute(&BM_pool).await?;
         sqlx::query("CREATE TABLE IF NOT EXISTS BM_webhooks (BM_id TEXT PRIMARY KEY, BM_payload TEXT NOT NULL)").execute(&BM_pool).await?;
         sqlx::query("CREATE TABLE IF NOT EXISTS BM_control (BM_id INTEGER PRIMARY KEY CHECK(BM_id=1), BM_enabled INTEGER NOT NULL DEFAULT 0, BM_generation INTEGER NOT NULL DEFAULT 0)").execute(&BM_pool).await?;
         sqlx::query("INSERT OR IGNORE INTO BM_control(BM_id,BM_enabled) VALUES(1,0)")

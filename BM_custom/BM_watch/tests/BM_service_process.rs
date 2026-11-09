@@ -233,3 +233,132 @@ async fn BM_process_auth_batches_and_restart() {
     assert_eq!(BM_status["BM_counts"]["review"], 1);
     assert_eq!(BM_status["BM_counts"]["skipped"], 1);
 }
+
+#[tokio::test]
+async fn BM_source_process_polls_once_per_interval_and_stops_with_supervisor() {
+    let BM_temp = tempfile::tempdir().unwrap();
+    let BM_root = BM_temp.path();
+    std::fs::set_permissions(BM_root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let BM_data = BM_root.join("BM_data");
+    std::fs::create_dir(&BM_data).unwrap();
+    std::fs::set_permissions(&BM_data, std::fs::Permissions::from_mode(0o700)).unwrap();
+    std::fs::create_dir(BM_root.join("BM_browser")).unwrap();
+    let BM_script = BM_root.join("BM_reader.py");
+    std::fs::write(&BM_script,r#"import json,os,sys
+from pathlib import Path
+config=json.loads(Path(os.environ['BM_READER_CONFIG']).read_text())
+data=Path(config['BM_data_dir'])
+with (data/'BM_reader_starts').open('a') as f:f.write(str(os.getpid())+'\n')
+print(json.dumps({'BM_state':'booted','BM_comments':[],'BM_complete':False}),flush=True)
+for line in sys.stdin:
+    request=json.loads(line)
+    with (data/'BM_reader_polls').open('a') as f:f.write('poll\n')
+    comment={'BM_account':'BM_owner','BM_work':request['BM_work'],'BM_comment':'BM_fixed_id','BM_author':'creator_uid:BM_reader','BM_text':'synthetic comment','BM_is_ai_reply':False}
+    print(json.dumps({'BM_state':'ready','BM_comments':[comment],'BM_complete':True}),flush=True)
+"#).unwrap();
+    let BM_port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let BM_path = BM_root.join("BM_watch.local.json");
+    let BM_token = "BM_synthetic_control_token_12345";
+    std::fs::write(&BM_path,serde_json::to_vec(&json!({"BM_data_dir":BM_data,"BM_goose_root":BM_root,"BM_admin_token":BM_token,"BM_interval_seconds":1,"BM_batch_size":1,"BM_port":BM_port,"BM_rules":{"BM_account":"BM_owner","BM_works":["12345678"],"BM_deny_contains":["synthetic"],"BM_max_reply_chars":200}})).unwrap()).unwrap();
+    std::fs::set_permissions(&BM_path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut BM_child = BM_Child(
+        Command::new(env!("CARGO_BIN_EXE_BM_watch"))
+            .arg("--config")
+            .arg(&BM_path)
+            .env("BM_READER_EXECUTABLE", "/usr/bin/python3")
+            .env("BM_READER_APP", &BM_script)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap(),
+    );
+    let mut BM_line = String::new();
+    BufReader::new(BM_child.0.stdout.take().unwrap())
+        .read_line(&mut BM_line)
+        .unwrap();
+    assert!(BM_line.starts_with("BM_watch running"));
+    let BM_http = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap();
+    let BM_base = format!("http://127.0.0.1:{BM_port}");
+    assert_eq!(
+        BM_http
+            .get(format!("{BM_base}/BM/source"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    BM_http
+        .post(format!("{BM_base}/BM/resume"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let BM_polls =
+                std::fs::read_to_string(BM_data.join("BM_reader_polls")).unwrap_or_default();
+            let BM_status: Value = BM_http
+                .get(format!("{BM_base}/BM/status"))
+                .bearer_auth(BM_token)
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            if BM_polls.lines().count() >= 3 && BM_status["BM_counts"]["skipped"] == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let BM_starts = std::fs::read_to_string(BM_data.join("BM_reader_starts")).unwrap();
+    assert_eq!(BM_starts.lines().count(), 1);
+    let BM_reader_pid = BM_starts.trim().to_string();
+    let BM_source: Value = BM_http
+        .get(format!("{BM_base}/BM/source"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_source["BM_state"], "ready");
+    assert_eq!(BM_source["BM_added"], 0);
+    BM_http
+        .post(format!("{BM_base}/BM/shutdown"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(6), async {
+        loop {
+            if BM_child.0.try_wait().unwrap().is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!Command::new("/bin/kill")
+        .arg("-0")
+        .arg(BM_reader_pid)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap()
+        .success());
+}

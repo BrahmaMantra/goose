@@ -29,6 +29,7 @@ pub fn BM_router(BM_state: Arc<BM_Service>) -> Router {
         )
         .route("/BM/status", get(BM_status))
         .route("/BM/task", get(BM_task))
+        .route("/BM/source", get(BM_source_status))
         .route("/BM/records", get(BM_records))
         .route("/BM/skip", post(BM_skip))
         .route("/BM/shutdown", post(BM_shutdown))
@@ -232,4 +233,19 @@ async fn BM_webhook(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({"BM_recorded":true})))
+}
+
+async fn BM_source_status(
+    State(BM_state): State<Arc<BM_Service>>,
+    BM_headers: HeaderMap,
+) -> Result<Json<crate::BM_source::BM_SourceStatus>, StatusCode> {
+    BM_authorize(&BM_headers, &BM_state)?;
+    Ok(Json(
+        BM_state
+            .BM_worker
+            .BM_store
+            .BM_source_status()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+    ))
 }

@@ -26,7 +26,8 @@ export function BM_registerWatchIpc(
   }
   const BM_manager = new BM_WatchManager(
     path.join(app.getPath('userData'), 'BM_watch.binding.json'),
-    BM_binary
+    BM_binary,
+    { BM_executable: process.execPath, BM_app: app.isPackaged ? undefined : app.getAppPath() }
   );
   const BM_login = new BM_Login();
   const BM_gooseRoot =

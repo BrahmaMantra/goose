@@ -103,6 +103,7 @@ export interface BM_Snapshot {
   BM_deny_contains: string[];
   BM_reply_marker: string;
   BM_requires_restart?: boolean;
+  BM_source?: BM_SourceStatus;
   BM_max_reply_chars: number;
   BM_interval_seconds: number;
   BM_error?: string;
@@ -116,3 +117,24 @@ export interface BM_ConfigEntry {
   BM_work_count: number;
   BM_selected: boolean;
 }
+
+export const BM_sourceStatusSchema = z
+  .object({
+    BM_state: z.enum([
+      'manual',
+      'paused',
+      'booted',
+      'ready',
+      'partial',
+      'login_required',
+      'account_mismatch',
+      'page_unavailable',
+      'reader_failed',
+    ]),
+    BM_seen: z.number().int().nonnegative(),
+    BM_added: z.number().int().nonnegative(),
+    BM_complete: z.boolean(),
+    BM_checked_at: z.number().int().nonnegative(),
+  })
+  .strict();
+export type BM_SourceStatus = z.infer<typeof BM_sourceStatusSchema>;

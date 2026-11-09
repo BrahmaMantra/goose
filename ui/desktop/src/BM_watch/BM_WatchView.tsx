@@ -5,6 +5,17 @@ import { Button } from '../components/ui/button';
 import type { BM_ConfigEntry, BM_Record, BM_Snapshot, BM_WatchAction } from './BM_types';
 import BM_CreateConfigView from './BM_CreateConfigView';
 
+const BM_sourceLabels: Record<string, string> = {
+  manual: '未接入自动读取',
+  paused: '读取已暂停，开始值守后继续读取',
+  booted: '评论读取器已启动',
+  ready: '官方页面评论读取成功',
+  partial: '已读取部分评论，尚未读取完整列表',
+  login_required: '需要登录：请在抖音评论读取窗口扫码，然后等待下一次读取',
+  account_mismatch: '扫码账号与当前配置不一致，请切换为配置中的账号',
+  page_unavailable: '官方评论页面暂不可读，请检查登录、网络或页面结构',
+  reader_failed: '评论读取器未就绪，请检查私有配置和后台版本',
+};
 const BM_labels: Record<string, string> = {
   queued: '待处理',
   processing: '处理中',
@@ -193,7 +204,7 @@ export default function BM_WatchView() {
             </p>
             {BM_snapshot?.BM_requires_restart && (
               <p role="alert" className="text-sm">
-                后台是旧版本，请先停止并重新启动，以启用新触发规则和 AI 标记。
+                后台需要更新，请先停止并重新启动，以启用当前触发规则和评论读取。
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
@@ -234,8 +245,13 @@ export default function BM_WatchView() {
                 停止后台
               </Button>
             </div>
+            <p role="status" className="text-sm text-text-secondary">
+              评论读取：{BM_sourceLabels[BM_snapshot?.BM_source?.BM_state ?? 'manual']}
+              {BM_snapshot?.BM_source &&
+                `；最近读取 ${BM_snapshot.BM_source.BM_seen} 条，新增入队 ${BM_snapshot.BM_source.BM_added} 条`}
+            </p>
             <p className="text-sm text-text-secondary">
-              关闭窗口后，已经启动的后台会继续运行。当前平台接入尚未完成：仅处理已入队消息并生成候选回复，不会自动读取或发送抖音评论。
+              关闭窗口后，已经启动的后台会继续运行。桌面启动的后台会通过官方创作者页面读取所选作品评论并生成候选回复；发送端仍关闭，不会自动发送评论。
             </p>
           </section>
           {BM_configs !== null && (

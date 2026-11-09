@@ -14,6 +14,7 @@ import {
   BM_accountSchema,
 } from './BM_privateConfig';
 import {
+  BM_sourceStatusSchema,
   BM_configIdSchema,
   type BM_ConfigEntry,
   BM_actionSchema,
@@ -68,7 +69,8 @@ export class BM_WatchManager {
   private BM_pending: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly BM_bindingFile: string,
-    private readonly BM_binary: string
+    private readonly BM_binary: string,
+    private readonly BM_readerLauncher?: { BM_executable: string; BM_app?: string }
   ) {}
 
   private async BM_privateRead(BM_file: string): Promise<string> {
@@ -296,6 +298,14 @@ export class BM_WatchManager {
       const BM_connection = await this.BM_connection();
       const BM_status = BM_statusSchema.parse(await this.BM_request(BM_connection, '/BM/status'));
       try {
+        BM_base.BM_source = BM_sourceStatusSchema.parse(
+          await this.BM_request(BM_connection, '/BM/source')
+        );
+      } catch {
+        /* Older backends do not expose source diagnostics. */
+      }
+
+      try {
         const BM_taskRaw = await this.BM_request(BM_connection, '/BM/task');
         const BM_task = BM_taskSchema.parse(BM_taskRaw);
         const BM_requires_restart = !(
@@ -308,7 +318,8 @@ export class BM_WatchManager {
           ...BM_task.BM_rules,
           BM_interval_seconds: BM_task.BM_interval_seconds,
           BM_running: true,
-          BM_requires_restart,
+          BM_requires_restart:
+            BM_requires_restart || (!!this.BM_readerLauncher && !BM_base.BM_source),
         };
       } catch {
         return {
@@ -390,7 +401,15 @@ export class BM_WatchManager {
       const BM_child = spawn(this.BM_binary, ['--config', BM_file], {
         detached: true,
         stdio: ['ignore', BM_out.fd, BM_err.fd],
-        env: { ...process.env },
+        env: {
+          ...process.env,
+          ...(this.BM_readerLauncher
+            ? {
+                BM_READER_EXECUTABLE: this.BM_readerLauncher.BM_executable,
+                BM_READER_APP: this.BM_readerLauncher.BM_app,
+              }
+            : {}),
+        },
       });
       await once(BM_child, 'spawn');
       BM_child.unref();

@@ -78,6 +78,7 @@ fn BM_main() -> Result<()> {
         std::fs::metadata(&BM_path)?.permissions().mode() & 0o077 == 0,
         "configuration must be private"
     );
+    let BM_config_file = BM_path.clone();
     let BM_config: BM_Config = serde_json::from_slice(&std::fs::read(BM_path)?)?;
     BM_config.BM_rules.BM_validate()?;
     ensure!(
@@ -125,10 +126,10 @@ fn BM_main() -> Result<()> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
-        .block_on(BM_serve(BM_config, BM_root))
+        .block_on(BM_serve(BM_config, BM_root, BM_config_file))
 }
 
-async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf) -> Result<()> {
+async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf, BM_config_file: PathBuf) -> Result<()> {
     let BM_store = BM_Store::BM_open(&BM_root.join("BM_queue.sqlite")).await?;
     let BM_worker = Arc::new(BM_Worker {
         BM_store,
@@ -138,6 +139,21 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf) -> Result<()> {
         BM_gate: tokio::sync::Mutex::new(()),
     });
     let BM_cancel = CancellationToken::new();
+    let BM_collector = if std::env::var_os("BM_READER_EXECUTABLE").is_some()
+        && BM_root
+            .parent()
+            .is_some_and(|BM_profile| BM_profile.join("BM_browser").is_dir())
+    {
+        Some(tokio::spawn(bm_watch::BM_source::BM_collect(
+            BM_config_file,
+            BM_worker.BM_store.clone(),
+            BM_worker.BM_rules.clone(),
+            BM_config.BM_interval_seconds,
+            BM_cancel.clone(),
+        )))
+    } else {
+        None
+    };
     let BM_service = Arc::new(BM_Service {
         BM_interval_seconds: BM_config.BM_interval_seconds,
         BM_cancel: BM_cancel.clone(),
@@ -175,6 +191,9 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf) -> Result<()> {
         .await;
     BM_cancel.cancel();
     BM_consumer.await?;
+    if let Some(BM_collector) = BM_collector {
+        BM_collector.await?;
+    }
     BM_result?;
     Ok(())
 }

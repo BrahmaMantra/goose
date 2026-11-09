@@ -177,7 +177,7 @@ module.exports = {
       config: {
         build: [
           {
-            entry: 'src/main.ts',
+            entry: 'src/BM_watch/BM_entry.ts',
             config: 'vite.main.config.mts',
           },
           {

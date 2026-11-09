@@ -1,4 +1,7 @@
-use crate::BM_store::{BM_Comment, BM_Store};
+use crate::{
+    BM_review::{BM_Assessment, BM_Reason, BM_ReviewAudit, BM_Reviewer, BM_Risk, BM_guard},
+    BM_store::{BM_Comment, BM_Store},
+};
 use anyhow::{ensure, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -16,6 +19,8 @@ pub struct BM_Decision {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BM_Rules {
+    #[serde(default)]
+    pub BM_auto_review: bool,
     pub BM_account: String,
     pub BM_works: Vec<String>,
     #[serde(default, alias = "BM_allow_contains")]
@@ -93,6 +98,7 @@ pub struct BM_Worker {
     pub BM_store: BM_Store,
     pub BM_rules: BM_Rules,
     pub BM_generator: Arc<dyn BM_Generator>,
+    pub BM_reviewer: Arc<dyn BM_Reviewer>,
     pub BM_platform: Arc<dyn BM_CommentPlatform>,
     /// Shared with pause/resume; serializes sending and lifecycle transitions.
     pub BM_gate: Mutex<()>,
@@ -104,6 +110,66 @@ impl BM_Worker {
         self.BM_store.BM_set_enabled(BM_enabled).await
     }
 
+    pub async fn BM_set_auto_review(&self, BM_enabled: bool) -> Result<()> {
+        let _BM_guard = self.BM_gate.lock().await;
+        self.BM_store.BM_set_auto_review(BM_enabled).await
+    }
+
+    pub fn BM_valid_reply(&self, BM_reply: &str) -> bool {
+        !BM_reply.trim().is_empty()
+            && BM_reply.chars().count() <= self.BM_rules.BM_max_reply_chars
+            && !BM_reply.chars().any(char::is_control)
+    }
+
+    pub async fn BM_approve(&self, BM_id: i64, BM_reply: &str) -> Result<bool> {
+        ensure!(
+            BM_id > 0 && self.BM_valid_reply(BM_reply),
+            "invalid approval"
+        );
+        let _BM_guard = self.BM_gate.lock().await;
+        self.BM_store.BM_approve(BM_id, BM_reply).await
+    }
+
+    pub async fn BM_skip(&self, BM_id: i64) -> Result<bool> {
+        let _BM_guard = self.BM_gate.lock().await;
+        self.BM_store.BM_skip(BM_id).await
+    }
+
+    async fn BM_send_approved(&self, BM_cancel: &CancellationToken) -> Result<bool> {
+        let _BM_guard = self.BM_gate.lock().await;
+        if BM_cancel.is_cancelled()
+            || !self.BM_store.BM_enabled().await?
+            || !self.BM_platform.BM_write_ready()
+        {
+            return Ok(false);
+        }
+        let Some((BM_id, BM_message, BM_reply)) = self.BM_store.BM_next_approved().await? else {
+            return Ok(false);
+        };
+        if !self.BM_rules.BM_target(&BM_message) || !self.BM_valid_reply(&BM_reply) {
+            self.BM_store
+                .BM_finish(BM_id, "review", Some(&BM_reply))
+                .await?;
+            return Ok(true);
+        }
+        if !self.BM_store.BM_begin_send(BM_id, &BM_reply).await? {
+            return Ok(true);
+        }
+        // A failed submission may have reached the platform; never retry blindly.
+        let BM_status = if self
+            .BM_platform
+            .BM_submit(&BM_message, &BM_reply)
+            .await
+            .is_ok()
+        {
+            "accepted"
+        } else {
+            "unknown"
+        };
+        self.BM_store.BM_finish(BM_id, BM_status, None).await?;
+        Ok(true)
+    }
+
     pub async fn BM_batch(&self, BM_limit: usize, BM_cancel: CancellationToken) -> Result<usize> {
         ensure!(BM_limit > 0 && BM_limit <= 100, "batch size must be 1..100");
         let mut BM_processed = 0;
@@ -111,6 +177,10 @@ impl BM_Worker {
             && !BM_cancel.is_cancelled()
             && self.BM_store.BM_enabled().await?
         {
+            if self.BM_send_approved(&BM_cancel).await? {
+                BM_processed += 1;
+                continue;
+            }
             let Some((BM_id, BM_message)) = self.BM_store.BM_claim().await? else {
                 break;
             };
@@ -157,15 +227,21 @@ impl BM_Worker {
                 continue;
             }
             let BM_reply = self.BM_rules.BM_mark_reply(&BM_decision.BM_text);
-            if !self.BM_platform.BM_write_ready()
-                || BM_reply.is_empty()
-                || BM_reply.chars().count() > self.BM_rules.BM_max_reply_chars
-            {
-                self.BM_store
-                    .BM_finish(BM_id, "review", Some(&BM_reply))
-                    .await?;
-                continue;
-            }
+            let BM_auto = self.BM_store.BM_auto_review().await?;
+            let BM_assessment = if !self.BM_valid_reply(&BM_reply) {
+                BM_Assessment::BM_new(BM_Risk::Uncertain, BM_Reason::InvalidReply)
+            } else if let Some(BM_risk) = BM_guard(&BM_message.BM_text, &BM_reply) {
+                BM_risk
+            } else if !BM_auto {
+                BM_Assessment::BM_new(BM_Risk::Uncertain, BM_Reason::ManualRequired)
+            } else {
+                self.BM_reviewer
+                    .BM_review(&BM_message, &BM_reply, BM_cancel.child_token())
+                    .await
+                    .unwrap_or_else(|_| {
+                        BM_Assessment::BM_new(BM_Risk::Uncertain, BM_Reason::ReviewerFailed)
+                    })
+            };
             let _BM_guard = self.BM_gate.lock().await;
             if BM_cancel.is_cancelled()
                 || !self.BM_store.BM_enabled().await?
@@ -176,21 +252,16 @@ impl BM_Worker {
                     .await?;
                 break;
             }
+            let BM_approved = BM_auto && BM_assessment.BM_auto_allowed();
+            let BM_audit =
+                BM_ReviewAudit::BM_new(BM_assessment, if BM_approved { "auto" } else { "system" });
             self.BM_store
-                .BM_finish(BM_id, "sending", Some(&BM_reply))
+                .BM_save_review(BM_id, &BM_reply, &BM_audit, BM_approved)
                 .await?;
-            // All submission failures are conservatively unknown; never retry blindly.
-            let BM_status = if self
-                .BM_platform
-                .BM_submit(&BM_message, &BM_reply)
-                .await
-                .is_ok()
-            {
-                "accepted"
-            } else {
-                "unknown"
-            };
-            self.BM_store.BM_finish(BM_id, BM_status, None).await?;
+            drop(_BM_guard);
+            if BM_approved {
+                self.BM_send_approved(&BM_cancel).await?;
+            }
         }
         Ok(BM_processed)
     }

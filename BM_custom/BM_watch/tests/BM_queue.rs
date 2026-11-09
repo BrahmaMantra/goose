@@ -2,6 +2,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use bm_watch::{
+    BM_review::{BM_Assessment, BM_Reason, BM_Reviewer, BM_Risk},
     BM_store::{BM_Comment, BM_Store},
     BM_worker::{BM_CommentPlatform, BM_Decision, BM_Generator, BM_Rules, BM_Worker},
 };
@@ -46,6 +47,17 @@ impl BM_CommentPlatform for BM_Fixture {
         Ok(())
     }
 }
+#[async_trait]
+impl BM_Reviewer for BM_Fixture {
+    async fn BM_review(
+        &self,
+        _BM_message: &BM_Comment,
+        _BM_reply: &str,
+        _BM_cancel: CancellationToken,
+    ) -> Result<BM_Assessment> {
+        Ok(BM_Assessment::BM_new(BM_Risk::Low, BM_Reason::Benign))
+    }
+}
 fn BM_message(BM_id: &str) -> BM_Comment {
     BM_Comment {
         BM_account: "BM_owner".into(),
@@ -60,6 +72,7 @@ fn BM_make_worker(BM_store: BM_Store, BM_fixture: Arc<BM_Fixture>) -> BM_Worker 
     BM_Worker {
         BM_store,
         BM_rules: BM_Rules {
+            BM_auto_review: true,
             BM_account: "BM_owner".into(),
             BM_works: vec!["BM_work".into()],
             BM_deny_contains: vec!["/clear".into()],
@@ -67,6 +80,7 @@ fn BM_make_worker(BM_store: BM_Store, BM_fixture: Arc<BM_Fixture>) -> BM_Worker 
             BM_reply_marker: "【from DeepSeek-V4.1-Flash-1017】".into(),
         },
         BM_generator: BM_fixture.clone(),
+        BM_reviewer: BM_fixture.clone(),
         BM_platform: BM_fixture,
         BM_gate: Mutex::new(()),
     }
@@ -93,6 +107,7 @@ async fn BM_batches_deduplicate_pause_and_recover_unknown() {
             .unwrap(),
         0
     );
+    BM_worker.BM_set_auto_review(true).await.unwrap();
     BM_worker.BM_pause(true).await.unwrap();
     assert_eq!(
         BM_worker
@@ -140,6 +155,7 @@ async fn BM_multiple_batches_reuse_generator_and_no_idle_calls() {
         BM_fail: false,
     });
     let BM_worker = BM_make_worker(BM_store.clone(), BM_fixture.clone());
+    BM_worker.BM_set_auto_review(true).await.unwrap();
     BM_worker.BM_pause(true).await.unwrap();
     for BM_id in ["BM_1", "BM_2", "BM_3"] {
         BM_store.BM_enqueue(&BM_message(BM_id)).await.unwrap();
@@ -206,6 +222,7 @@ async fn BM_own_humans_trigger_but_ai_echoes_do_not() {
     let mut BM_worker = BM_make_worker(BM_store.clone(), BM_fixture.clone());
     BM_worker.BM_rules.BM_deny_contains.clear();
     BM_worker.BM_rules.BM_reply_marker = "【from BM model】".into();
+    BM_worker.BM_set_auto_review(true).await.unwrap();
     BM_worker.BM_pause(true).await.unwrap();
     let mut BM_human = BM_message("BM_human");
     BM_human.BM_author = "BM_owner".into();
@@ -256,6 +273,7 @@ async fn BM_denied_words_skip_without_model_calls_and_marker_counts_in_length() 
         BM_fail: false,
     });
     let mut BM_worker = BM_make_worker(BM_store.clone(), BM_fixture.clone());
+    BM_worker.BM_set_auto_review(true).await.unwrap();
     BM_worker.BM_pause(true).await.unwrap();
     for (BM_index, BM_text) in ["/clear", "please /CLEAR now"].into_iter().enumerate() {
         let mut BM_comment = BM_message(&format!("BM_block_{BM_index}"));
@@ -341,6 +359,7 @@ async fn BM_no_reply_decision_skips_without_publishing_reason_as_reply() {
         .BM_finish(BM_id, "queued", Some("旧候选回复"))
         .await
         .unwrap();
+    BM_worker.BM_set_auto_review(true).await.unwrap();
     BM_worker.BM_pause(true).await.unwrap();
     BM_worker
         .BM_batch(1, CancellationToken::new())

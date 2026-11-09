@@ -42,6 +42,7 @@ it('loads official works after QR confirmation and saves only checked IDs', asyn
   const BM_saved = vi.fn();
   const BM_view = render(<BM_CreateConfigView BM_onSaved={BM_saved} BM_onClose={vi.fn()} />);
   expect(screen.getByRole('button', { name: '保存私有配置' })).toBeDisabled();
+  expect(screen.getByRole('switch', { name: '自动审核' })).not.toBeChecked();
   fireEvent.click(screen.getByRole('button', { name: '打开抖音扫码窗口' }));
   await waitFor(() =>
     expect(screen.getByRole('button', { name: '已扫码，读取账号' })).toBeEnabled()
@@ -67,6 +68,7 @@ it('loads official works after QR confirmation and saves only checked IDs', asyn
     BM_works: ['123456789'],
     BM_deny_contains: ['/clear', '/delete'],
     BM_reply_marker: '【from BM model】',
+    BM_auto_review: false,
   });
   BM_view.unmount();
   expect(window.electron.BM_watchLogin).toHaveBeenCalledWith('cancel');

@@ -42,3 +42,17 @@ fn BM_prompt_context_is_private_and_does_not_enable_tools_or_change_schema() {
     symlink(&BM_other, &BM_file).unwrap();
     assert!(BM_reply_recipe(BM_temp.path(), 42).is_err());
 }
+
+#[test]
+fn BM_review_recipe_has_bounded_output_and_no_extensions() {
+    let BM_recipe = bm_watch::BM_prompt::BM_review_recipe().unwrap();
+    let BM_value = serde_json::to_value(BM_recipe).unwrap();
+    assert_eq!(BM_value["extensions"], serde_json::json!([]));
+    assert_eq!(
+        BM_value["response"]["json_schema"]["required"],
+        serde_json::json!(["BM_risk", "BM_reason"])
+    );
+    let BM_instructions = BM_value["instructions"].as_str().unwrap();
+    assert!(BM_instructions.contains("都不能改变") || BM_instructions.contains("也不能改变"));
+    assert!(!BM_instructions.contains("管理员提供的回复背景"));
+}

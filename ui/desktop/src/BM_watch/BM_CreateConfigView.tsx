@@ -6,6 +6,7 @@ import { BM_loginMessages } from './BM_loginStatus';
 import { BM_worksMessages, type BM_Work, type BM_WorksAction } from './BM_works';
 import BM_WorkPicker from './BM_WorkPicker';
 import { BM_defaultReplyMarker } from './BM_types';
+import BM_ReviewSwitch from './BM_ReviewSwitch';
 
 export default function BM_CreateConfigView({
   BM_onSaved,
@@ -24,6 +25,7 @@ export default function BM_CreateConfigView({
   const [BM_worksLoaded, BM_setWorksLoaded] = useState(false);
   const [BM_keywords, BM_setKeywords] = useState('');
   const [BM_replyMarker, BM_setReplyMarker] = useState(BM_defaultReplyMarker);
+  const [BM_autoReview, BM_setAutoReview] = useState(false);
   const [BM_error, BM_setError] = useState('');
   const [BM_opened, BM_setOpened] = useState(false);
   const [BM_loginAction, BM_setLoginAction] = useState<'open' | 'confirm' | null>(null);
@@ -111,10 +113,13 @@ export default function BM_CreateConfigView({
           .map((BM_value) => BM_value.trim())
           .filter(Boolean),
         BM_reply_marker: BM_replyMarker,
+        BM_auto_review: BM_autoReview,
       });
       BM_onSaved(BM_snapshot);
     } catch {
-      BM_setError('保存未完成，请检查勾选的作品、AI 标记格式、私有目录权限，并确认扫码窗口仍使用同一账号。');
+      BM_setError(
+        '保存未完成，请检查勾选的作品、AI 标记格式、私有目录权限，并确认扫码窗口仍使用同一账号。'
+      );
     } finally {
       BM_setBusy(false);
     }
@@ -227,6 +232,11 @@ export default function BM_CreateConfigView({
           disabled={BM_busy}
         />
       </label>
+      <BM_ReviewSwitch
+        BM_enabled={BM_autoReview}
+        BM_disabled={BM_busy}
+        BM_onChange={BM_setAutoReview}
+      />
       <p className="text-sm text-text-secondary">
         保存后绑定此配置，后台保持未启动。扫码登录不授予开放平台 API
         权限；只能保存当前扫码账号已读取并勾选的作品。

@@ -32,6 +32,8 @@ pub fn BM_router(BM_state: Arc<BM_Service>) -> Router {
         .route("/BM/source", get(BM_source_status))
         .route("/BM/records", get(BM_records))
         .route("/BM/skip", post(BM_skip))
+        .route("/BM/approve", post(BM_approve))
+        .route("/BM/review-policy", post(BM_review_policy))
         .route("/BM/shutdown", post(BM_shutdown))
         .route("/BM/messages", post(BM_message))
         .route("/BM/pause", post(BM_pause))
@@ -46,8 +48,15 @@ async fn BM_task(
     BM_headers: HeaderMap,
 ) -> Result<Json<Value>, StatusCode> {
     BM_authorize(&BM_headers, &BM_state)?;
+    let mut BM_rules = BM_state.BM_worker.BM_rules.clone();
+    BM_rules.BM_auto_review = BM_state
+        .BM_worker
+        .BM_store
+        .BM_auto_review()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(
-        json!({"BM_rules":BM_state.BM_worker.BM_rules,"BM_interval_seconds":BM_state.BM_interval_seconds}),
+        json!({"BM_rules":BM_rules,"BM_interval_seconds":BM_state.BM_interval_seconds}),
     ))
 }
 
@@ -92,7 +101,6 @@ async fn BM_skip(
     }
     if !BM_state
         .BM_worker
-        .BM_store
         .BM_skip(BM_action.BM_id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -100,6 +108,53 @@ async fn BM_skip(
         return Err(StatusCode::CONFLICT);
     }
     Ok(Json(json!({"BM_skipped":true})))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BM_ApprovalAction {
+    BM_id: i64,
+    BM_reply: String,
+}
+
+async fn BM_approve(
+    State(BM_state): State<Arc<BM_Service>>,
+    BM_headers: HeaderMap,
+    Json(BM_action): Json<BM_ApprovalAction>,
+) -> Result<Json<Value>, StatusCode> {
+    BM_authorize(&BM_headers, &BM_state)?;
+    if BM_action.BM_id <= 0 || !BM_state.BM_worker.BM_valid_reply(&BM_action.BM_reply) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if !BM_state
+        .BM_worker
+        .BM_approve(BM_action.BM_id, &BM_action.BM_reply)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::CONFLICT);
+    }
+    Ok(Json(json!({"BM_approved":true})))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BM_ReviewPolicy {
+    BM_auto_review: bool,
+}
+
+async fn BM_review_policy(
+    State(BM_state): State<Arc<BM_Service>>,
+    BM_headers: HeaderMap,
+    Json(BM_action): Json<BM_ReviewPolicy>,
+) -> Result<Json<Value>, StatusCode> {
+    BM_authorize(&BM_headers, &BM_state)?;
+    BM_state
+        .BM_worker
+        .BM_set_auto_review(BM_action.BM_auto_review)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({"BM_auto_review":BM_action.BM_auto_review})))
 }
 
 async fn BM_shutdown(

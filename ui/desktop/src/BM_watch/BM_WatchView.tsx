@@ -2,8 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderOpen, Play, Pause, Square, RefreshCw, MessageSquare } from 'lucide-react';
 import { MainPanelLayout } from '../components/Layout/MainPanelLayout';
 import { Button } from '../components/ui/button';
-import type { BM_ConfigEntry, BM_Record, BM_Snapshot, BM_WatchAction } from './BM_types';
+import {
+  BM_validReply,
+  type BM_ConfigEntry,
+  type BM_Record,
+  type BM_Snapshot,
+  type BM_WatchAction,
+} from './BM_types';
 import BM_CreateConfigView from './BM_CreateConfigView';
+import BM_ReviewSwitch from './BM_ReviewSwitch';
 
 const BM_sourceLabels: Record<string, string> = {
   manual: '未配置评论读取器',
@@ -21,12 +28,29 @@ const BM_sourceLabels: Record<string, string> = {
 const BM_labels: Record<string, string> = {
   queued: '待处理',
   processing: '处理中',
-  review: '候选回复',
+  review: '待审核',
+  approved: '已批准，等待发送',
   skipped: '已跳过',
   failed: '失败',
   sending: '提交中',
   accepted: '平台已接受',
   unknown: '结果未知',
+};
+
+const BM_reviewReasons: Record<string, string> = {
+  benign: '普通交流，符合低风险条件',
+  injection: '涉及指令或权限操纵',
+  privacy: '涉及隐私或凭据',
+  harmful: '可能涉及有害内容',
+  sensitive_advice: '涉及高风险专业建议',
+  commitment: '涉及身份冒充或现实承诺',
+  unclear: '上下文或安全性无法确定',
+  invalid_reply: '回复为空、超长或包含控制字符，不能批准',
+  manual_required: '自动审核已关闭',
+  reviewer_failed: '自动审核未完成，转人工处理',
+  policy_changed: '自动审核已关闭，撤回自动批准',
+  manual_approved: '管理员已批准当前正文',
+  manual_rejected: '管理员已跳过',
 };
 
 export default function BM_WatchView() {
@@ -104,6 +128,31 @@ export default function BM_WatchView() {
       await BM_refresh();
     } catch {
       BM_setError('无法跳过此记录，它的状态可能已经变化。');
+    } finally {
+      BM_setBusy(false);
+    }
+  };
+  const BM_setPolicy = async (BM_enabled: boolean) => {
+    BM_setBusy(true);
+    BM_setError('');
+    try {
+      BM_setSnapshot(await window.electron.BM_watchSetAutoReview(BM_enabled));
+      await BM_refresh();
+    } catch {
+      await BM_refresh();
+      BM_setError('自动审核更新未完成；请确认后台已暂停，检查配置并重启后台。');
+    } finally {
+      BM_setBusy(false);
+    }
+  };
+  const BM_approve = async (BM_record: BM_Record) => {
+    BM_setBusy(true);
+    BM_setError('');
+    try {
+      await window.electron.BM_watchApprove(BM_record.BM_id, BM_record.BM_reply!);
+      await BM_refresh();
+    } catch {
+      BM_setError('无法批准，请刷新记录；正文或状态可能已变化，也可能超出回复长度限制。');
     } finally {
       BM_setBusy(false);
     }
@@ -204,6 +253,18 @@ export default function BM_WatchView() {
               AI 回复标记：{BM_snapshot?.BM_reply_marker || ''}
               。自己的人工评论也会触发，自己的 AI 回复会跳过。
             </p>
+            <BM_ReviewSwitch
+              BM_enabled={BM_snapshot?.BM_auto_review ?? false}
+              BM_disabled={
+                BM_busy ||
+                BM_creating ||
+                !BM_snapshot?.BM_configured ||
+                !!BM_snapshot?.BM_requires_restart
+              }
+              BM_onChange={(BM_enabled) => {
+                void BM_setPolicy(BM_enabled);
+              }}
+            />
             {BM_snapshot?.BM_requires_restart && (
               <p role="alert" className="text-sm">
                 后台需要更新，请先停止并重新启动，以启用当前触发规则和评论读取。
@@ -314,7 +375,7 @@ export default function BM_WatchView() {
             </p>
           )}
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="队列统计">
-            {['queued', 'review', 'failed', 'accepted'].map((BM_status) => (
+            {['queued', 'review', 'approved', 'accepted'].map((BM_status) => (
               <div key={BM_status} className="rounded-xl border border-border-primary p-4">
                 <div className="text-sm text-text-secondary">{BM_labels[BM_status]}</div>
                 <div className="mt-2 text-2xl font-semibold">
@@ -350,7 +411,31 @@ export default function BM_WatchView() {
                     <p className="whitespace-pre-wrap break-words">{BM_record.BM_reply}</p>
                   </div>
                 )}
-                {['review', 'failed'].includes(BM_record.BM_status) && (
+                {BM_record.BM_review && (
+                  <p className="text-sm text-text-secondary">
+                    审核：{BM_reviewReasons[BM_record.BM_review.BM_assessment.BM_reason]} ·
+                    {BM_record.BM_review.BM_actor === 'auto'
+                      ? '自动批准'
+                      : BM_record.BM_review.BM_actor === 'admin'
+                        ? '人工处理'
+                        : '规则与审核检查'}
+                  </p>
+                )}
+                {BM_record.BM_status === 'review' && (
+                  <Button
+                    disabled={
+                      BM_busy ||
+                      !!BM_snapshot?.BM_requires_restart ||
+                      !BM_validReply(BM_record.BM_reply ?? '', BM_snapshot?.BM_max_reply_chars ?? 0)
+                    }
+                    onClick={() => {
+                      void BM_approve(BM_record);
+                    }}
+                  >
+                    批准此回复
+                  </Button>
+                )}
+                {['review', 'failed', 'approved'].includes(BM_record.BM_status) && (
                   <Button
                     variant="outline"
                     disabled={BM_busy}

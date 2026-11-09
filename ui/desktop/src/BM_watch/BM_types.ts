@@ -6,6 +6,7 @@ export const BM_statusNames = [
   'queued',
   'processing',
   'review',
+  'approved',
   'skipped',
   'failed',
   'sending',
@@ -13,6 +14,19 @@ export const BM_statusNames = [
   'unknown',
 ] as const;
 export const BM_defaultReplyMarker = '【from DeepSeek-V4.1-Flash-1017】';
+export function BM_hasControlChars(BM_value: string): boolean {
+  return Array.from(BM_value).some((BM_char) => {
+    const BM_code = BM_char.codePointAt(0)!;
+    return BM_code < 32 || (BM_code >= 127 && BM_code <= 159);
+  });
+}
+export function BM_validReply(BM_value: string, BM_maxChars: number): boolean {
+  return (
+    BM_value.trim().length > 0 &&
+    Array.from(BM_value).length <= BM_maxChars &&
+    !BM_hasControlChars(BM_value)
+  );
+}
 export const BM_replyMarkerSchema = z
   .string()
   .trim()
@@ -23,10 +37,7 @@ export const BM_replyMarkerSchema = z
       BM_value.startsWith('【') &&
       BM_value.endsWith('】') &&
       BM_value.slice(1, -1).trim().length > 0 &&
-      !Array.from(BM_value).some((BM_char) => {
-        const BM_code = BM_char.codePointAt(0)!;
-        return BM_code < 32 || (BM_code >= 127 && BM_code <= 159);
-      })
+      !BM_hasControlChars(BM_value)
   );
 export function BM_legacyRules(BM_value: unknown): unknown {
   if (
@@ -45,6 +56,7 @@ export const BM_rulesSchema = z.preprocess(
   BM_legacyRules,
   z
     .object({
+      BM_auto_review: z.boolean().default(false),
       BM_account: z.string().min(1),
       BM_works: z.array(z.string().min(1)).min(1),
       BM_deny_contains: z.array(z.string().min(1)).default([]),
@@ -87,12 +99,42 @@ export const BM_recordSchema = z
       })
       .strict(),
     BM_reply: z.string().nullable(),
+    BM_review: z
+      .object({
+        BM_assessment: z
+          .object({
+            BM_risk: z.enum(['low', 'risky', 'uncertain']),
+            BM_reason: z.enum([
+              'benign',
+              'injection',
+              'privacy',
+              'harmful',
+              'sensitive_advice',
+              'commitment',
+              'unclear',
+              'invalid_reply',
+              'manual_required',
+              'reviewer_failed',
+              'policy_changed',
+              'manual_approved',
+              'manual_rejected',
+            ]),
+          })
+          .strict(),
+        BM_actor: z.enum(['auto', 'admin', 'system']),
+        BM_at: z.number().int().nonnegative(),
+        BM_policy_version: z.string().max(100),
+      })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export const BM_recordsSchema = z.object({ BM_records: z.array(BM_recordSchema).max(50) }).strict();
 export type BM_Record = z.infer<typeof BM_recordSchema>;
 export interface BM_Snapshot {
   BM_configured: boolean;
+  BM_auto_review: boolean;
   BM_config_name: string;
   BM_running: boolean;
   BM_enabled: boolean;

@@ -14,6 +14,7 @@ import {
   BM_accountSchema,
 } from './BM_privateConfig';
 import {
+  BM_validReply,
   BM_sourceStatusSchema,
   BM_configIdSchema,
   type BM_ConfigEntry,
@@ -270,6 +271,7 @@ export class BM_WatchManager {
     const BM_file = await this.BM_binding();
     const BM_base: BM_Snapshot = {
       BM_configured: false,
+      BM_auto_review: false,
       BM_config_name: '',
       BM_running: false,
       BM_enabled: false,
@@ -310,7 +312,8 @@ export class BM_WatchManager {
         const BM_task = BM_taskSchema.parse(BM_taskRaw);
         const BM_requires_restart = !(
           'BM_deny_contains' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
-          'BM_reply_marker' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules
+          'BM_reply_marker' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules &&
+          'BM_auto_review' in (BM_taskRaw as { BM_rules: Record<string, unknown> }).BM_rules
         );
         return {
           ...BM_base,
@@ -319,7 +322,9 @@ export class BM_WatchManager {
           BM_interval_seconds: BM_task.BM_interval_seconds,
           BM_running: true,
           BM_requires_restart:
-            BM_requires_restart || (!!this.BM_readerLauncher && !BM_base.BM_source),
+            BM_requires_restart ||
+            (!!this.BM_readerLauncher && !BM_base.BM_source) ||
+            BM_base.BM_auto_review !== BM_task.BM_rules.BM_auto_review,
         };
       } catch {
         return {
@@ -442,6 +447,65 @@ export class BM_WatchManager {
     return BM_recordsSchema.parse(
       await this.BM_request(BM_config, `/BM/records${BM_before ? `?BM_before=${BM_before}` : ''}`)
     ).BM_records;
+  }
+  async BM_setAutoReview(BM_enabled: boolean): Promise<BM_Snapshot> {
+    z.boolean().parse(BM_enabled);
+    return this.BM_serial(async () => {
+      const BM_file = await this.BM_binding();
+      if (!BM_file) throw new Error('请先选择私有配置');
+      await this.BM_outsideCheckout(BM_file);
+      const BM_config = await this.BM_config(BM_file);
+      const BM_snapshot = await this.BM_snapshot();
+      if (BM_snapshot.BM_running && BM_snapshot.BM_requires_restart)
+        throw new Error('请先停止并更新后台，再修改自动审核');
+      // Pause before persisting so a failed update cannot leave automatic sending active.
+      if (BM_snapshot.BM_running)
+        await this.BM_request(await this.BM_connection(), '/BM/pause', 'POST');
+      const BM_tmp = `${BM_file}.BM_${randomUUID()}`;
+      try {
+        BM_config.BM_rules.BM_auto_review = BM_enabled;
+        await fs.writeFile(BM_tmp, JSON.stringify(BM_config, null, 2), { mode: 0o600, flag: 'wx' });
+        await fs.rename(BM_tmp, BM_file);
+        if (BM_snapshot.BM_running) {
+          const BM_result = z
+            .object({ BM_auto_review: z.boolean() })
+            .strict()
+            .parse(
+              await this.BM_request(await this.BM_connection(), '/BM/review-policy', 'POST', {
+                BM_auto_review: BM_enabled,
+              })
+            );
+          if (BM_result.BM_auto_review !== BM_enabled) throw new Error('审核设置未确认');
+          if (BM_snapshot.BM_enabled)
+            await this.BM_request(await this.BM_connection(), '/BM/resume', 'POST');
+        }
+      } catch {
+        if (BM_snapshot.BM_running) {
+          try {
+            await this.BM_request(await this.BM_connection(), '/BM/pause', 'POST');
+          } catch {
+            /* A disconnected backend must be checked before consumption resumes. */
+          }
+        }
+        throw new Error('自动审核更新未完成；请确认后台已暂停，检查配置并重启后台');
+      } finally {
+        await fs.rm(BM_tmp, { force: true });
+      }
+      return this.BM_snapshot();
+    });
+  }
+  async BM_approve(BM_id: number, BM_reply: string): Promise<void> {
+    z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);
+    z.string().min(1).max(4000).parse(BM_reply);
+    await this.BM_serial(async () => {
+      const BM_snapshot = await this.BM_snapshot();
+      if (!BM_snapshot.BM_running || BM_snapshot.BM_requires_restart)
+        throw new Error('请先连接更新后的后台');
+      z.string()
+        .refine((BM_value) => BM_validReply(BM_value, BM_snapshot.BM_max_reply_chars))
+        .parse(BM_reply);
+      await this.BM_request(await this.BM_connection(), '/BM/approve', 'POST', { BM_id, BM_reply });
+    });
   }
   async BM_skip(BM_id: number): Promise<void> {
     z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);

@@ -134,13 +134,18 @@ async fn BM_serve(BM_config: BM_Config, BM_root: PathBuf, BM_config_file: PathBu
     let BM_reply_budget = BM_config.BM_rules.BM_max_reply_chars
         - BM_config.BM_rules.BM_reply_marker.chars().count()
         - 1;
+    BM_store
+        .BM_set_auto_review(BM_config.BM_rules.BM_auto_review)
+        .await?;
+    let BM_runtime = Arc::new(BM_GooseRuntime::BM_with_reply_budget(
+        BM_root.clone(),
+        BM_reply_budget,
+    ));
     let BM_worker = Arc::new(BM_Worker {
         BM_store,
         BM_rules: BM_config.BM_rules,
-        BM_generator: Arc::new(BM_GooseRuntime::BM_with_reply_budget(
-            BM_root.clone(),
-            BM_reply_budget,
-        )),
+        BM_generator: BM_runtime.clone(),
+        BM_reviewer: BM_runtime,
         BM_platform: Arc::new(BM_NoWrites),
         BM_gate: tokio::sync::Mutex::new(()),
     });

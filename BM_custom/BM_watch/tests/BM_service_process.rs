@@ -195,6 +195,103 @@ async fn BM_process_auth_batches_and_restart() {
             .status(),
         401
     );
+    assert_eq!(
+        BM_http
+            .post(format!("{BM_base}/BM/review-policy"))
+            .json(&json!({"BM_auto_review":true}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        BM_http
+            .post(format!("{BM_base}/BM/review-policy"))
+            .bearer_auth(BM_token)
+            .header("Origin", "https://example.com")
+            .json(&json!({"BM_auto_review":true}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert!(BM_http
+        .post(format!("{BM_base}/BM/review-policy"))
+        .bearer_auth(BM_token)
+        .json(&json!({"BM_auto_review":true}))
+        .send()
+        .await
+        .unwrap()
+        .status()
+        .is_success());
+    let BM_task: Value = BM_http
+        .get(format!("{BM_base}/BM/task"))
+        .bearer_auth(BM_token)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(BM_task["BM_rules"]["BM_auto_review"], true);
+    let BM_comment = bm_watch::BM_store::BM_Comment {
+        BM_account: "BM_owner".into(),
+        BM_work: "BM_work".into(),
+        BM_comment: "BM_approve".into(),
+        BM_author: "BM_reader".into(),
+        BM_text: "synthetic approval".into(),
+        BM_is_ai_reply: false,
+    };
+    BM_store.BM_enqueue(&BM_comment).await.unwrap();
+    let (BM_approve_id, _) = BM_store.BM_claim().await.unwrap().unwrap();
+    BM_store
+        .BM_finish(BM_approve_id, "review", Some("合成候选回复"))
+        .await
+        .unwrap();
+    assert_eq!(
+        BM_http
+            .post(format!("{BM_base}/BM/approve"))
+            .json(&json!({"BM_id":BM_approve_id,"BM_reply":"合成候选回复"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert_eq!(
+        BM_http
+            .post(format!("{BM_base}/BM/approve"))
+            .bearer_auth(BM_token)
+            .header("Origin", "https://example.com")
+            .json(&json!({"BM_id":BM_approve_id,"BM_reply":"合成候选回复"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    for (BM_reply, BM_expected) in [
+        ("不同的正文", 409),
+        ("", 400),
+        ("合成候选回复", 200),
+        ("合成候选回复", 409),
+    ] {
+        assert_eq!(
+            BM_http
+                .post(format!("{BM_base}/BM/approve"))
+                .bearer_auth(BM_token)
+                .json(&json!({"BM_id":BM_approve_id,"BM_reply":BM_reply}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            BM_expected
+        );
+    }
+    assert_eq!(BM_store.BM_counts().await.unwrap()["approved"], 1);
     let BM_second = Command::new(env!("CARGO_BIN_EXE_BM_watch"))
         .arg("--config")
         .arg(&BM_path)
@@ -263,6 +360,7 @@ async fn BM_process_auth_batches_and_restart() {
     assert_eq!(BM_source["BM_complete"], false);
     assert_eq!(BM_status["BM_enabled"], false);
     assert_eq!(BM_status["BM_counts"]["review"], 1);
+    assert_eq!(BM_status["BM_counts"]["approved"], 1);
     assert_eq!(BM_status["BM_counts"]["skipped"], 1);
 }
 

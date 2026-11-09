@@ -77,6 +77,14 @@ export function BM_registerWatchIpc(
     BM_requireWindow(BM_event);
     return BM_manager.BM_records(BM_before);
   });
+  ipcMain.handle('BM-watch:review-policy', (BM_event, BM_enabled: boolean) => {
+    BM_requireWindow(BM_event);
+    return BM_manager.BM_setAutoReview(BM_enabled);
+  });
+  ipcMain.handle('BM-watch:approve', (BM_event, BM_id: number, BM_reply: string) => {
+    BM_requireWindow(BM_event);
+    return BM_manager.BM_approve(BM_id, BM_reply);
+  });
   ipcMain.handle('BM-watch:skip', (BM_event, BM_id: number) => {
     BM_requireWindow(BM_event);
     return BM_manager.BM_skip(BM_id);

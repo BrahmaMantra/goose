@@ -1,12 +1,14 @@
 # 评论区值守：单进程消息处理与 Goose 集成设计
 
-状态：已实现 Rust API library、常驻队列服务、进程内 Goose 适配、桌面管理、Electron IPC 与扫码创建私有配置；真实平台评论读写尚未完成。源码核查日期：2026-11-06。
+状态：已实现 Rust API library、常驻队列服务、进程内 Goose 适配、桌面管理、Electron IPC 与扫码创建私有配置；官方网页评论读取与候选审核已接入，真实发送尚未完成。
 
 桌面扫码配置由 `BM_login` 管理官方网页窗口，`BM_privateConfig` 管理仓库外持久化，独立于 Rust 评论 API。新建账号使用独立浏览器目录，保存可见昵称与抖音号及值守规则；默认目录、取消清理和切换流程见 [桌面创建与账号切换](../BM_watch/BM_README.md#桌面创建与账号切换)。网页抖音号不等于 OpenAPI 身份，网页读取由 Rust `BM_source` 管理的长期 Electron 读取器接入，复用私有登录快照和持久化的读取器启动配置，读取所选作品的官方评论管理页面并去重入队。发送仍关闭；OpenAPI 资格和网页登录路线分别验证。
 
 最新决定是使用 Rust 小型 API 封装，保持单个评论后台进程。当前入口与命令见 [BM_watch 使用说明](../BM_watch/BM_README.md)，API 状态见 [Rust API 分层](BM_douyin_api_design.md)。
 
 原生模拟测试证实 Goose 的 SkillOperation 自动注入 load_skill，不受空扩展列表控制。本实现增加 `StateMachineServicesConfig.BM_disable_skills`，默认 false；专用评论 Runtime 设置 true，关闭发现、加载和 Skill 快捷命令。该开关是最小通用内核改动，不是完整多角色权限系统。
+
+候选审核由应用层 `BM_review` 与桌面配置控制：OFF 全部人工，ON 仅明确低风险自动批准；风险或审核失败转人工。审核、批准与真实发送分开持久化，详见 [候选回复审核](../BM_watch/BM_README.md#候选回复审核)。Goose 提供独立 Recipe、结构化校验与共享 Runtime，不替代业务发送批准。
 
 ## 1. 确定的需求与执行形态
 
@@ -66,8 +68,9 @@ flowchart TD
         Ingress --> Queue[SQLite 持久化消息队列]
         Queue --> Consumer[批次消费者]
         Consumer --> Runtime[复用的 Goose Runtime]
-        Runtime --> Policy[回复规则复核]
-        Policy --> Sender[绑定原评论的发送器]
+        Runtime --> Policy[候选回复审核]
+        Policy --> Approved[已批准回复队列]
+        Approved --> Sender[绑定原评论的发送器]
         Admin[值守管理 API] --> Consumer
     end
     Desktop[Goose 桌面管理页面] --> Admin

@@ -6,6 +6,7 @@ let BM_snapshot: BM_Snapshot;
 beforeEach(() => {
   BM_snapshot = {
     BM_configured: true,
+    BM_auto_review: false,
     BM_config_name: 'BM_watch.local.json',
     BM_running: true,
     BM_enabled: true,
@@ -49,6 +50,11 @@ beforeEach(() => {
       return BM_snapshot;
     }),
     BM_watchSkip: vi.fn(async () => undefined),
+    BM_watchApprove: vi.fn(async () => undefined),
+    BM_watchSetAutoReview: vi.fn(async (BM_enabled: boolean) => {
+      BM_snapshot = { ...BM_snapshot, BM_auto_review: BM_enabled };
+      return BM_snapshot;
+    }),
   });
 });
 describe('BM watch desktop page', () => {
@@ -105,4 +111,54 @@ describe('BM watch desktop page', () => {
     expect(screen.getByRole('button', { name: '开始值守' })).toBeDisabled();
     expect(window.electron.BM_watchAction).not.toHaveBeenCalled();
   });
+});
+
+it('switches review policy and approves only the displayed reply text', async () => {
+  render(<BM_WatchView />);
+  await screen.findByText('BM candidate');
+  expect(screen.getByRole('switch', { name: '自动审核' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('switch', { name: '自动审核' }));
+  await waitFor(() => expect(window.electron.BM_watchSetAutoReview).toHaveBeenCalledWith(true));
+  await waitFor(() => expect(screen.getByRole('switch', { name: '自动审核' })).toBeChecked());
+  fireEvent.click(screen.getByRole('button', { name: '批准此回复' }));
+  await waitFor(() =>
+    expect(window.electron.BM_watchApprove).toHaveBeenCalledWith(1, 'BM candidate')
+  );
+});
+it('shows approved replies as waiting for sending and permits withdrawal', async () => {
+  vi.mocked(window.electron.BM_watchRecords).mockResolvedValue([
+    {
+      BM_id: 2,
+      BM_status: 'approved',
+      BM_reply: 'BM approved',
+      BM_message: {
+        BM_account: 'BM_owner',
+        BM_work: 'BM_work',
+        BM_comment: 'BM_comment',
+        BM_author: 'BM_reader',
+        BM_text: 'BM hello',
+        BM_is_ai_reply: false,
+      },
+      BM_review: {
+        BM_actor: 'auto',
+        BM_at: 1,
+        BM_policy_version: 'BM_comment_review_v1',
+        BM_assessment: { BM_risk: 'low', BM_reason: 'benign' },
+      },
+    },
+  ]);
+  render(<BM_WatchView />);
+  await screen.findByText('BM approved');
+  expect(screen.getAllByText('已批准，等待发送').length).toBeGreaterThan(0);
+  expect(screen.getByText(/普通交流，符合低风险条件/)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '批准此回复' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '跳过' }));
+  await waitFor(() => expect(window.electron.BM_watchSkip).toHaveBeenCalledWith(2));
+});
+it('blocks review controls until the backend is upgraded', async () => {
+  BM_snapshot = { ...BM_snapshot, BM_requires_restart: true };
+  render(<BM_WatchView />);
+  await screen.findByText('BM candidate');
+  expect(screen.getByRole('switch', { name: '自动审核' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: '批准此回复' })).toBeDisabled();
 });

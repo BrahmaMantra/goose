@@ -64,6 +64,7 @@ export const BM_createSchema = z
       .max(100),
     BM_deny_contains: z.array(z.string().trim().min(1).max(200)).max(100),
     BM_reply_marker: BM_replyMarkerSchema.default(BM_defaultReplyMarker),
+    BM_auto_review: z.boolean().default(false),
   })
   .strict();
 export type BM_CreateConfig = z.input<typeof BM_createSchema>;
@@ -165,6 +166,7 @@ export async function BM_saveConfig(
           BM_batch_size: 10,
           BM_port: 8791,
           BM_rules: {
+            BM_auto_review: BM_rules.BM_auto_review,
             BM_account: BM_identity.BM_douyin_id,
             BM_works: [...new Set(BM_rules.BM_works)],
             BM_deny_contains: BM_rules.BM_deny_contains,

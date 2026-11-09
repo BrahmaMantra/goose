@@ -8,6 +8,7 @@
   "BM_batch_size": 10,
   "BM_port": 8791,
   "BM_rules": {
+    "BM_auto_review": false,
     "BM_account": "BM_example_owner",
     "BM_works": ["BM_example_work"],
     "BM_deny_contains": [],

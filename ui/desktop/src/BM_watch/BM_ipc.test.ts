@@ -47,6 +47,8 @@ it('checks renderer provenance before touching configuration or records', async 
     throw new Error('untrusted frame');
   });
   expect(() => BM_handlers.get('BM-watch:snapshot')?.({})).toThrow('untrusted frame');
+  expect(() => BM_handlers.get('BM-watch:approve')?.({}, 1, 'BM reply')).toThrow('untrusted frame');
+  expect(() => BM_handlers.get('BM-watch:review-policy')?.({}, true)).toThrow('untrusted frame');
   await expect(BM_handlers.get('BM-watch:select')?.({})).rejects.toThrow('untrusted frame');
   expect(BM_snapshot).not.toHaveBeenCalled();
   await expect(BM_handlers.get('BM-watch:configs')?.({})).rejects.toThrow('untrusted frame');

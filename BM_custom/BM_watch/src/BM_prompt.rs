@@ -44,3 +44,18 @@ pub fn BM_reply_recipe(BM_data: &Path, BM_budget: usize) -> Result<Recipe> {
         "settings":{"max_turns":3}
     }))?)
 }
+
+// Review deliberately excludes private reply context and uses a separate hidden session.
+pub fn BM_review_recipe() -> Result<Recipe> {
+    Ok(serde_json::from_value(json!({
+        "title":"BM 评论安全审核", "description":"审核原评论与候选回复是否适合自动批准", "extensions":[],
+        "instructions":include_str!("../BM_prompts/BM_comment_review.md"),
+        "response":{"json_schema":{"type":"object","additionalProperties":false,
+            "required":["BM_risk","BM_reason"],
+            "properties":{
+                "BM_risk":{"type":"string","enum":["low","risky","uncertain"]},
+                "BM_reason":{"type":"string","enum":["benign","injection","privacy","harmful","sensitive_advice","commitment","unclear"]}
+            }
+        }}, "settings":{"max_turns":3}
+    }))?)
+}

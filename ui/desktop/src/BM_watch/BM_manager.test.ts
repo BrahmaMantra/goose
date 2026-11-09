@@ -20,11 +20,14 @@ let BM_server: http.Server;
 let BM_manager: BM_WatchManager;
 let BM_port: number;
 let BM_enabled: boolean;
+let BM_autoReview: boolean;
+let BM_policyFailure: boolean;
 let BM_extra: boolean;
 let BM_legacyTask: boolean;
 let BM_routes: string[];
 const BM_token = 'BM_synthetic_control_token_12345';
 const BM_rules = {
+  BM_auto_review: false,
   BM_account: 'BM_owner',
   BM_works: ['BM_running_work'],
   BM_deny_contains: ['question'],
@@ -36,6 +39,8 @@ beforeEach(async () => {
   vi.clearAllMocks();
   BM_routes = [];
   BM_enabled = true;
+  BM_autoReview = false;
+  BM_policyFailure = false;
   BM_extra = false;
   BM_legacyTask = false;
   BM_root = await fs.mkdtemp(path.join(os.tmpdir(), 'BM_desktop_'));
@@ -62,7 +67,7 @@ beforeEach(async () => {
               BM_allow_contains: ['/clear'],
               BM_max_reply_chars: 200,
             }
-          : BM_rules,
+          : { ...BM_rules, BM_auto_review: BM_autoReview },
         BM_interval_seconds: 30,
       };
     if (BM_request.url?.startsWith('/BM/records')) BM_value = { BM_records: [] };
@@ -73,6 +78,22 @@ beforeEach(async () => {
     if (BM_request.url === '/BM/resume') {
       BM_enabled = true;
       BM_value = { BM_enabled };
+    }
+    if (BM_request.url === '/BM/review-policy') {
+      let BM_body = '';
+      BM_request.on('data', (BM_chunk) => {
+        BM_body += BM_chunk;
+      });
+      BM_request.on('end', () => {
+        if (BM_policyFailure) {
+          BM_response.statusCode = 500;
+          BM_response.end('{}');
+          return;
+        }
+        BM_autoReview = JSON.parse(BM_body).BM_auto_review;
+        BM_response.end(JSON.stringify({ BM_auto_review: BM_autoReview }));
+      });
+      return;
     }
     BM_response.setHeader('Content-Type', 'application/json');
     BM_response.end(JSON.stringify(BM_value));
@@ -237,4 +258,35 @@ describe('BM desktop manager boundary', () => {
     expect((await fs.stat(BM_savedReader)).mode & 0o077).toBe(0);
     expect(BM_child.unref).toHaveBeenCalledOnce();
   });
+});
+
+it('persists the review switch privately and pauses before applying the live policy', async () => {
+  await BM_manager.BM_bind(BM_file);
+  const BM_result = await BM_manager.BM_setAutoReview(true);
+  expect(BM_result.BM_auto_review).toBe(true);
+  expect(BM_result.BM_enabled).toBe(true);
+  const BM_saved = JSON.parse(await fs.readFile(BM_file, 'utf8'));
+  expect(BM_saved.BM_rules.BM_auto_review).toBe(true);
+  expect(BM_saved.BM_admin_token).toBe(BM_token);
+  expect((await fs.stat(BM_file)).mode & 0o077).toBe(0);
+  expect(BM_routes.indexOf('/BM/pause')).toBeLessThan(BM_routes.indexOf('/BM/review-policy'));
+  expect(BM_routes.indexOf('/BM/review-policy')).toBeLessThan(BM_routes.indexOf('/BM/resume'));
+  await BM_manager.BM_approve(1, 'BM reviewed text');
+  expect(BM_routes).toContain('/BM/approve');
+});
+it('keeps consumption paused when a policy update fails and shows the mismatch', async () => {
+  await BM_manager.BM_bind(BM_file);
+  BM_policyFailure = true;
+  await expect(BM_manager.BM_setAutoReview(true)).rejects.toThrow('暂停');
+  expect(BM_enabled).toBe(false);
+  expect(BM_routes).not.toContain('/BM/resume');
+  expect((await BM_manager.BM_snapshot()).BM_requires_restart).toBe(true);
+});
+it('validates review inputs before issuing requests', async () => {
+  await BM_manager.BM_bind(BM_file);
+  const BM_count = BM_routes.length;
+  await expect(BM_manager.BM_setAutoReview('on' as never)).rejects.toThrow();
+  await expect(BM_manager.BM_approve(-1, 'BM reply')).rejects.toThrow();
+  await expect(BM_manager.BM_approve(1, '')).rejects.toThrow();
+  expect(BM_routes).toHaveLength(BM_count);
 });

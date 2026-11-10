@@ -52,6 +52,7 @@ beforeEach(() => {
     }),
     BM_watchSkip: vi.fn(async () => undefined),
     BM_watchApprove: vi.fn(async () => undefined),
+    BM_watchVerify: vi.fn(async () => true),
     BM_watchSetAutoReview: vi.fn(async (BM_enabled: boolean) => {
       BM_snapshot = { ...BM_snapshot, BM_auto_review: BM_enabled };
       return BM_snapshot;
@@ -163,4 +164,30 @@ it('blocks review controls until the backend is upgraded', async () => {
   await screen.findByText('BM candidate');
   expect(screen.getByRole('switch', { name: '自动审核' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '批准此回复' })).toBeDisabled();
+});
+
+it('offers only readback for unknown results and never approves or retries them', async () => {
+  vi.mocked(window.electron.BM_watchRecords).mockResolvedValue([
+    {
+      BM_id: 3,
+      BM_status: 'unknown',
+      BM_reply: 'BM candidate',
+      BM_review: null,
+      BM_delivery: { BM_state: 'unknown', BM_code: 'BM_transport_unknown', BM_reply_id: null },
+      BM_message: {
+        BM_account: 'BM_owner',
+        BM_work: 'BM_work',
+        BM_comment: 'BM_comment',
+        BM_author: 'BM_reader',
+        BM_text: 'BM hello',
+        BM_is_ai_reply: false,
+      },
+    },
+  ]);
+  render(<BM_WatchView />);
+  await screen.findByText('BM candidate');
+  expect(screen.queryByRole('button', { name: '批准此回复' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '核对抖音结果' }));
+  await waitFor(() => expect(window.electron.BM_watchVerify).toHaveBeenCalledWith(3));
+  expect(window.electron.BM_watchApprove).not.toHaveBeenCalled();
 });

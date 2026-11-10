@@ -62,7 +62,21 @@ export function BM_matchReplyRequest(
       return false;
     const BM_data = BM_modern ? Object.fromEntries(BM_value.searchParams) : JSON.parse(BM_body);
     if (BM_modern && BM_body) {
-      const BM_post = JSON.parse(BM_body);
+      let BM_post: Record<string, unknown>;
+      try {
+        const BM_json: unknown = JSON.parse(BM_body);
+        if (!BM_json || typeof BM_json !== 'object' || Array.isArray(BM_json)) return false;
+        BM_post = BM_json as Record<string, unknown>;
+      } catch {
+        const BM_form = new URLSearchParams(BM_body);
+        if (
+          ['aweme_id', 'reply_to_comment_ids', 'text'].some(
+            (BM_key) => BM_form.getAll(BM_key).length !== 1
+          )
+        )
+          return false;
+        BM_post = Object.fromEntries(BM_form);
+      }
       if (
         ['aweme_id', 'reply_to_comment_ids', 'text'].some(
           (BM_key) => BM_key in BM_post && BM_post[BM_key] !== BM_data[BM_key]
@@ -175,5 +189,36 @@ export function BM_replyPageScript(
     if(BM_input.textContent!==BM_request.BM_reply)return false;
     const BM_buttons=[...BM_card.querySelectorAll('button')].filter(BM_el=>BM_ownControl(BM_el)&&BM_el.innerText.trim()==='发送'&&!BM_el.disabled&&![...BM_el.classList].some(BM_class=>BM_class.startsWith('input-button-disabled')));
     if(BM_buttons.length!==1)return false;BM_buttons[0].click();return true;
+  })()`;
+}
+
+export function BM_verifyReplyScript(
+  BM_request: BM_SendRequest,
+  BM_itemIds: Set<string>,
+  BM_load: boolean
+): string {
+  return `(()=>{
+    const BM_request=${JSON.stringify(BM_request)};
+    const BM_itemIds=${JSON.stringify([...BM_itemIds])};
+    if(location.origin!=='https://creator.douyin.com'||location.pathname.replace(/\\/$/,'')!=='/creator-micro/work-management/work-detail/'+BM_request.BM_message.BM_work)return null;
+    ${BM_findReplyCard.replace('return false;', 'return null;')}
+    if(!${JSON.stringify(BM_load)}) {
+      const BM_replies=[...BM_card.querySelectorAll('[class*="comment-item-"]')].filter(BM_el=>[...BM_el.classList].some(BM_c=>BM_c.startsWith('comment-item-')));
+      const BM_ids=[];
+      for(const BM_el of BM_replies){
+        let BM_f=BM_el[Object.keys(BM_el).find(BM_k=>BM_k.startsWith('__reactFiber$'))];
+        for(let BM_i=0;BM_f&&BM_i<5;BM_i++,BM_f=BM_f.return){
+          const BM_p=BM_f.memoizedProps;
+          if(BM_p?.comment){
+            if(BM_p.levelOneCid===BM_request.BM_message.BM_comment&&BM_p.comment.is_author===true&&BM_p.comment.text===BM_request.BM_reply&&typeof BM_p.comment.comment_id==='string'&&BM_itemIds.includes(BM_p.itemId))BM_ids.push(BM_p.comment.comment_id);
+            break;
+          }
+        }
+      }
+      return BM_ids.length===1?BM_ids[0]:null;
+    }
+    const BM_buttons=[...BM_card.querySelectorAll('[class*="load-reply-"]')].filter(BM_el=>BM_ownControl(BM_el)&&/^查看.*条回复$/.test(BM_el.innerText.trim()));
+    if(BM_buttons.length!==1)return false;
+    BM_buttons[0].click();return true;
   })()`;
 }

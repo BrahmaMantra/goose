@@ -55,6 +55,7 @@ const BM_reviewReasons: Record<string, string> = {
 };
 
 const BM_deliveryMessages: Record<string, string> = {
+  BM_reply_confirmed: '已在官方评论区确认回复',
   BM_platform_accepted: '平台已接受提交',
   BM_platform_rejected: '平台明确拒绝回复',
   BM_login_required: '需要在官方窗口重新扫码登录',
@@ -173,6 +174,19 @@ export default function BM_WatchView() {
       await BM_refresh();
     } catch {
       BM_setError('无法批准，请刷新记录；正文或状态可能已变化，也可能超出回复长度限制。');
+    } finally {
+      BM_setBusy(false);
+    }
+  };
+  const BM_verify = async (BM_id: number) => {
+    BM_setBusy(true);
+    BM_setError('');
+    try {
+      const BM_verified = await window.electron.BM_watchVerify(BM_id);
+      await BM_refresh();
+      if (!BM_verified) BM_setError('未能在官方页面确认该回复，保留结果未知；不会重发。');
+    } catch {
+      BM_setError('回查未完成，请检查后台与官方页面；不会重发。');
     } finally {
       BM_setBusy(false);
     }
@@ -457,6 +471,17 @@ export default function BM_WatchView() {
                         ? '人工处理'
                         : '规则与审核检查'}
                   </p>
+                )}
+                {BM_record.BM_status === 'unknown' && (
+                  <Button
+                    variant="outline"
+                    disabled={BM_busy || !!BM_snapshot?.BM_requires_restart}
+                    onClick={() => {
+                      void BM_verify(BM_record.BM_id);
+                    }}
+                  >
+                    核对抖音结果
+                  </Button>
                 )}
                 {BM_record.BM_status === 'review' && (
                   <Button

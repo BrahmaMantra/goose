@@ -510,6 +510,21 @@ export class BM_WatchManager {
       await this.BM_request(await this.BM_connection(), '/BM/approve', 'POST', { BM_id, BM_reply });
     });
   }
+  async BM_verify(BM_id: number): Promise<boolean> {
+    z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);
+    return this.BM_serial(async () => {
+      const BM_state = await this.BM_snapshot();
+      if (!BM_state.BM_running || BM_state.BM_requires_restart)
+        throw new Error('请先连接更新后的后台');
+      const BM_result = z
+        .object({ BM_verified: z.boolean(), BM_delivery: z.unknown() })
+        .strict()
+        .parse(
+          await this.BM_request(await this.BM_connection(), '/BM/verify', 'POST', { BM_id }, 125000)
+        );
+      return BM_result.BM_verified;
+    });
+  }
   async BM_skip(BM_id: number): Promise<void> {
     z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);
     const BM_file = await this.BM_binding();

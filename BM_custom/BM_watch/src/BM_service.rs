@@ -33,6 +33,7 @@ pub fn BM_router(BM_state: Arc<BM_Service>) -> Router {
         .route("/BM/records", get(BM_records))
         .route("/BM/skip", post(BM_skip))
         .route("/BM/approve", post(BM_approve))
+        .route("/BM/verify", post(BM_verify))
         .route("/BM/review-policy", post(BM_review_policy))
         .route("/BM/shutdown", post(BM_shutdown))
         .route("/BM/messages", post(BM_message))
@@ -155,6 +156,52 @@ async fn BM_review_policy(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({"BM_auto_review":BM_action.BM_auto_review})))
+}
+
+async fn BM_verify(
+    State(BM_state): State<Arc<BM_Service>>,
+    BM_headers: HeaderMap,
+    Json(BM_action): Json<BM_RecordAction>,
+) -> Result<Json<Value>, StatusCode> {
+    BM_authorize(&BM_headers, &BM_state)?;
+    let BM_before = BM_action
+        .BM_id
+        .checked_add(1)
+        .filter(|_| BM_action.BM_id > 0)
+        .ok_or(StatusCode::BAD_REQUEST)?;
+    let _BM_guard = BM_state.BM_worker.BM_gate.lock().await;
+    let BM_records = BM_state
+        .BM_worker
+        .BM_store
+        .BM_records(Some(BM_before))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let BM_record = BM_records
+        .into_iter()
+        .find(|BM_record| BM_record.BM_id == BM_action.BM_id)
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if BM_record.BM_status != "unknown" {
+        return Err(StatusCode::CONFLICT);
+    }
+    let BM_reply = BM_record.BM_reply.ok_or(StatusCode::CONFLICT)?;
+    let BM_receipt = BM_state
+        .BM_worker
+        .BM_platform
+        .BM_verify(&BM_record.BM_message, &BM_reply)
+        .await;
+    let BM_verified = if BM_receipt.BM_state == "accepted" {
+        BM_state
+            .BM_worker
+            .BM_store
+            .BM_confirm_delivery(BM_record.BM_id, &BM_reply, &BM_receipt)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        false
+    };
+    Ok(Json(
+        json!({"BM_verified":BM_verified,"BM_delivery":BM_receipt}),
+    ))
 }
 
 async fn BM_shutdown(

@@ -3,6 +3,7 @@ import {
   BM_matchReplyRequest,
   BM_parseReplyReceipt,
   BM_replyPageScript,
+  BM_verifyReplyScript,
   type BM_SendRequest,
 } from './BM_commentSend';
 const BM_request: BM_SendRequest = {
@@ -167,4 +168,73 @@ describe('BM bound comment delivery', () => {
     expect(BM_other.querySelector('[contenteditable]')).toBeNull();
     document.body.innerHTML = '';
   });
+});
+
+it('confirms only a creator reply bound to the original comment, without clicking send', () => {
+  document.body.innerHTML =
+    '<div class="comment-item-BM_root"><div class="comment-item-BM_child"></div></div>';
+  const BM_root = document.querySelector('.comment-item-BM_root')!;
+  const BM_child = document.querySelector('.comment-item-BM_child')!;
+  Object.defineProperty(BM_root, '__reactFiber$BM', {
+    enumerable: true,
+    value: {
+      memoizedProps: {
+        comment: {
+          comment_id: 'BM_comment',
+          text: '你好',
+          user_info: { user_id: 'BM_reader' },
+          is_author: false,
+        },
+        itemId: 'BM_mapped_item',
+      },
+    },
+  });
+  const BM_props = {
+    comment: { comment_id: 'BM_reply', text: BM_request.BM_reply, is_author: true },
+    itemId: 'BM_mapped_item',
+    levelOneCid: 'BM_comment',
+  };
+  Object.defineProperty(BM_child, '__reactFiber$BM', {
+    enumerable: true,
+    value: { memoizedProps: BM_props },
+  });
+  const BM_read = () =>
+    new Function(
+      'location',
+      'document',
+      'return ' + BM_verifyReplyScript(BM_request, BM_itemIds, false)
+    )(
+      {
+        origin: 'https://creator.douyin.com',
+        pathname: '/creator-micro/work-management/work-detail/12345678',
+      },
+      document
+    );
+  expect(BM_read()).toBe('BM_reply');
+  BM_props.comment.is_author = false;
+  expect(BM_read()).toBeNull();
+  BM_props.comment.is_author = true;
+  BM_props.levelOneCid = 'BM_other';
+  expect(BM_read()).toBeNull();
+  document.body.innerHTML = '';
+});
+
+it('accepts the official form body only when its target and text agree with the approved query', () => {
+  const BM_form = new URLSearchParams({
+    aweme_id: 'BM_mapped_item',
+    reply_to_comment_ids: 'BM_comment',
+    text: BM_request.BM_reply,
+  });
+  expect(BM_matchReplyRequest(BM_url, 'POST', BM_form.toString(), BM_request, BM_itemIds)).toBe(
+    true
+  );
+  BM_form.set('text', '不同的正文');
+  expect(BM_matchReplyRequest(BM_url, 'POST', BM_form.toString(), BM_request, BM_itemIds)).toBe(
+    false
+  );
+  BM_form.set('text', BM_request.BM_reply);
+  BM_form.append('reply_to_comment_ids', 'BM_other');
+  expect(BM_matchReplyRequest(BM_url, 'POST', BM_form.toString(), BM_request, BM_itemIds)).toBe(
+    false
+  );
 });

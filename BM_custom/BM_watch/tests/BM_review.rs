@@ -376,3 +376,62 @@ async fn BM_delivery_failures_persist_without_automatic_resubmission() {
         assert_eq!(BM_fixture.BM_generated.load(Ordering::SeqCst), 1);
     }
 }
+
+#[tokio::test]
+async fn BM_unknown_confirmation_requires_evidence_and_keeps_reply_immutable() {
+    let BM_temp = tempfile::tempdir().unwrap();
+    let BM_fixture = Arc::new(BM_Fixture::BM_new(BM_Risk::Low));
+    let BM_worker = BM_setup(&BM_temp.path().join("BM_queue.sqlite"), BM_fixture.clone()).await;
+    BM_enqueue(&BM_worker, "BM_confirmation", "你好").await;
+    BM_worker
+        .BM_batch(1, CancellationToken::new())
+        .await
+        .unwrap();
+    let BM_record = BM_worker.BM_store.BM_records(None).await.unwrap().remove(0);
+    let BM_reply = BM_record.BM_reply.unwrap();
+    BM_worker
+        .BM_approve(BM_record.BM_id, &BM_reply)
+        .await
+        .unwrap();
+    BM_worker
+        .BM_store
+        .BM_begin_send(BM_record.BM_id, &BM_reply)
+        .await
+        .unwrap();
+    BM_worker
+        .BM_store
+        .BM_finish_delivery(
+            BM_record.BM_id,
+            &bm_watch::BM_delivery::BM_Delivery::BM_new("unknown", "BM_transport_unknown"),
+        )
+        .await
+        .unwrap();
+    let mut BM_receipt =
+        bm_watch::BM_delivery::BM_Delivery::BM_new("accepted", "BM_reply_confirmed");
+    assert!(BM_worker
+        .BM_store
+        .BM_confirm_delivery(BM_record.BM_id, &BM_reply, &BM_receipt)
+        .await
+        .is_err());
+    BM_receipt.BM_reply_id = Some("BM_platform_reply".into());
+    assert!(!BM_worker
+        .BM_store
+        .BM_confirm_delivery(BM_record.BM_id, "另一份正文", &BM_receipt)
+        .await
+        .unwrap());
+    assert!(BM_worker
+        .BM_store
+        .BM_confirm_delivery(BM_record.BM_id, &BM_reply, &BM_receipt)
+        .await
+        .unwrap());
+    assert!(!BM_worker
+        .BM_store
+        .BM_confirm_delivery(BM_record.BM_id, &BM_reply, &BM_receipt)
+        .await
+        .unwrap());
+    assert_eq!(
+        BM_worker.BM_store.BM_records(None).await.unwrap()[0].BM_status,
+        "accepted"
+    );
+    assert!(BM_fixture.BM_sent.lock().await.is_empty());
+}

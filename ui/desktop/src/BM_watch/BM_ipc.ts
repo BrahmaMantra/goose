@@ -85,6 +85,10 @@ export function BM_registerWatchIpc(
     BM_requireWindow(BM_event);
     return BM_manager.BM_approve(BM_id, BM_reply);
   });
+  ipcMain.handle('BM-watch:verify', (BM_event, BM_id: number) => {
+    BM_requireWindow(BM_event);
+    return BM_manager.BM_verify(BM_id);
+  });
   ipcMain.handle('BM-watch:skip', (BM_event, BM_id: number) => {
     BM_requireWindow(BM_event);
     return BM_manager.BM_skip(BM_id);

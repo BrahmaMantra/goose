@@ -116,6 +116,7 @@ type ElectronAPI = {
   BM_watchSkip: (BM_id: number) => Promise<void>;
   BM_watchSetAutoReview: (BM_enabled: boolean) => Promise<BM_Snapshot>;
   BM_watchApprove: (BM_id: number, BM_reply: string) => Promise<void>;
+  BM_watchVerify: (BM_id: number) => Promise<boolean>;
   platform: string;
   arch: string;
   reactReady: () => void;
@@ -220,6 +221,7 @@ const electronAPI: ElectronAPI = {
   BM_watchSkip: (BM_id) => ipcRenderer.invoke('BM-watch:skip', BM_id),
   BM_watchSetAutoReview: (BM_enabled) => ipcRenderer.invoke('BM-watch:review-policy', BM_enabled),
   BM_watchApprove: (BM_id, BM_reply) => ipcRenderer.invoke('BM-watch:approve', BM_id, BM_reply),
+  BM_watchVerify: (BM_id) => ipcRenderer.invoke('BM-watch:verify', BM_id),
   platform: process.platform,
   arch: process.arch,
   reactReady: () => ipcRenderer.send('react-ready'),

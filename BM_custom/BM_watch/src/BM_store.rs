@@ -225,6 +225,33 @@ impl BM_Store {
         BM_tx.commit().await?;
         Ok(())
     }
+    pub async fn BM_confirm_delivery(
+        &self,
+        BM_id: i64,
+        BM_reply: &str,
+        BM_delivery: &crate::BM_delivery::BM_Delivery,
+    ) -> Result<bool> {
+        ensure!(
+            BM_delivery.BM_state == "accepted"
+                && BM_delivery
+                    .BM_reply_id
+                    .as_ref()
+                    .is_some_and(|BM_id| !BM_id.is_empty()),
+            "confirmation required"
+        );
+        let mut BM_tx = self.BM_pool.begin().await?;
+        let BM_result = sqlx::query("UPDATE BM_inbox SET BM_status='accepted' WHERE BM_id=? AND BM_status='unknown' AND BM_reply=?")
+            .bind(BM_id).bind(BM_reply).execute(&mut *BM_tx).await?;
+        if BM_result.rows_affected() == 1 {
+            sqlx::query("INSERT INTO BM_deliveries(BM_record,BM_receipt) VALUES(?,?)")
+                .bind(BM_id)
+                .bind(serde_json::to_string(BM_delivery)?)
+                .execute(&mut *BM_tx)
+                .await?;
+        }
+        BM_tx.commit().await?;
+        Ok(BM_result.rows_affected() == 1)
+    }
     pub async fn BM_open(BM_path: &Path) -> Result<Self> {
         let BM_file = std::fs::OpenOptions::new()
             .write(true)

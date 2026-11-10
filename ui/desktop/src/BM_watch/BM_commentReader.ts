@@ -4,10 +4,13 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
+import { performance as BM_clock } from 'node:perf_hooks';
 import { z } from 'zod';
 import { BM_readAccountScript, BM_allowedLoginUrl, BM_creatorUrl } from './BM_login';
 import { BM_privateDirectory, BM_accountSchema } from './BM_privateConfig';
 import { BM_rulesSchema, BM_validReply } from './BM_types';
+import { BM_PageRuntime, BM_needsNavigation } from './BM_pageRuntime';
+import { BM_PageNetwork } from './BM_pageNetwork';
 import {
   BM_delivery,
   BM_sendRequestSchema,
@@ -15,6 +18,7 @@ import {
   BM_matchReplyRequest,
   BM_parseReplyReceipt,
   BM_replyPageScript,
+  BM_verifyReplyScript,
   type BM_SendRequest,
   type BM_Delivery,
 } from './BM_commentSend';
@@ -84,7 +88,7 @@ export async function BM_runCommentReader(): Promise<void> {
     }
     await BM_privateDirectory(BM_browser);
     await app.whenReady();
-    const BM_session = session.fromPath(BM_browser, { cache: false });
+    const BM_session = session.fromPath(BM_browser, { cache: true });
     BM_session.setPermissionRequestHandler((_BM_contents, _BM_permission, BM_callback) =>
       BM_callback(false)
     );
@@ -118,6 +122,45 @@ export async function BM_runCommentReader(): Promise<void> {
           BM_attempt.BM_request,
           BM_attempt.BM_itemIds
         );
+      if (BM_attempt && !BM_allowed) {
+        const BM_url = new URL(BM_details.url);
+        let BM_post: Record<string, unknown> = {};
+        try {
+          const BM_value = JSON.parse(BM_body);
+          if (BM_value && typeof BM_value === 'object') BM_post = BM_value;
+        } catch {
+          BM_post = Object.fromEntries(new URLSearchParams(BM_body));
+        }
+        const BM_query = Object.fromEntries(BM_url.searchParams);
+        void fs
+          .writeFile(
+            path.join(BM_data, 'BM_reply_request_check.local.json'),
+            JSON.stringify({
+              BM_host: BM_url.hostname,
+              BM_path: BM_url.pathname,
+              BM_method: BM_details.method,
+              BM_query_keys: Object.keys(BM_query),
+              BM_body_keys: Object.keys(BM_post),
+              BM_route_matches: BM_replyRoute(BM_details.url),
+              BM_query_item_matches: BM_attempt.BM_itemIds.has(
+                BM_query.aweme_id ?? BM_query.item_id
+              ),
+              BM_query_comment_matches:
+                (BM_query.reply_to_comment_ids ?? BM_query.comment_Id) ===
+                BM_attempt.BM_request.BM_message.BM_comment,
+              BM_query_text_matches: BM_query.text === BM_attempt.BM_request.BM_reply,
+              BM_body_item_matches: BM_attempt.BM_itemIds.has(
+                String(BM_post.aweme_id ?? BM_post.item_id)
+              ),
+              BM_body_comment_matches:
+                (BM_post.reply_to_comment_ids ?? BM_post.comment_Id) ===
+                BM_attempt.BM_request.BM_message.BM_comment,
+              BM_body_text_matches: BM_post.text === BM_attempt.BM_request.BM_reply,
+            }),
+            { mode: 0o600 }
+          )
+          .catch(() => undefined);
+      }
       if (BM_allowed) BM_attempt!.BM_attempted = true;
       else if (BM_attempt) BM_attempt.BM_rejected = true;
       BM_callback({ cancel: !BM_allowed });
@@ -173,35 +216,75 @@ export async function BM_runCommentReader(): Promise<void> {
     });
     const BM_view = BM_window;
     BM_view.setTitle(`抖音评论读取 · 配置账号 ${BM_config.BM_rules.BM_account}`);
+    const BM_network = new BM_PageNetwork();
+    const BM_runtime = new BM_PageRuntime(BM_view.webContents.debugger);
     let BM_stage = 'initialization';
+    let BM_lastAccountCode = 'BM_page_loading';
+    let BM_loginWindowShown = false;
+    const BM_showLogin = () => {
+      if (!BM_loginWindowShown) {
+        BM_view.show();
+        BM_view.focus();
+        BM_loginWindowShown = true;
+      }
+    };
+    type BM_AccountObservation = {
+      BM_account?: z.infer<typeof BM_accountSchema>;
+      BM_code?: string;
+    };
+    const BM_eval = <T = unknown>(BM_script: string, BM_gesture = false) =>
+      BM_runtime.BM_evaluate<T>(BM_script, BM_gesture);
     const BM_diagnostic = async () => {
       let BM_page = {};
       try {
         BM_page = await BM_timeout(
-          BM_view.webContents.executeJavaScript(
-            `({BM_ready:document.readyState,BM_login_visible:/扫码登录/.test(document.body?.innerText??''),BM_comment_tab_count:document.querySelectorAll('[data-comment-entry-guide-target]').length,BM_comment_card_count:document.querySelectorAll('[class*="comment-item-"]').length})`
+          BM_eval<Record<string, unknown>>(
+            `({BM_ready:document.readyState,BM_login_visible:/扫码登录/.test(document.body?.innerText??''),BM_comment_tab_count:document.querySelectorAll('[data-comment-entry-guide-target]').length,BM_comment_card_count:document.querySelectorAll('[class*="comment-item-"]').length,BM_at_home:location.pathname==='/creator-micro/home',BM_main_count:document.querySelectorAll('main').length,BM_iframe_count:document.querySelectorAll('iframe').length,BM_label_count:[...document.querySelectorAll('*')].filter(BM_el=>/^抖音号[：:]/.test(BM_el.innerText??'')&&BM_el.getClientRects().length>0).length})`
           ),
           2000
         );
       } catch {
         /* The renderer may not be ready. */
       }
+      try {
+        const BM_capture = await BM_timeout(
+          BM_view.webContents.capturePage(undefined, { stayHidden: true }),
+          3000
+        );
+        await fs.writeFile(
+          path.join(BM_data, 'BM_reader_diagnostic.local.png'),
+          BM_capture.toPNG(),
+          { mode: 0o600 }
+        );
+      } catch {
+        /* A failed capture must not affect the queue or page operation. */
+      }
+      await fs.writeFile(
+        path.join(BM_data, 'BM_network_diagnostic.local.json'),
+        JSON.stringify(BM_network.BM_snapshot()),
+        { mode: 0o600 }
+      );
       await fs.writeFile(
         path.join(BM_data, 'BM_reader_diagnostic.local.json'),
-        JSON.stringify({ BM_stage, ...BM_page }),
+        JSON.stringify({ BM_stage, BM_lastAccountCode, ...BM_page }),
         { mode: 0o600 }
       );
     };
     const BM_navigate = async (BM_url: string) => {
-      let BM_ready: (() => void) | undefined;
-      const BM_dom = new Promise<void>((BM_resolve) => {
-        BM_ready = BM_resolve;
-        BM_view.webContents.once('dom-ready', BM_ready);
-      });
+      if (!BM_needsNavigation(BM_view.webContents.getURL(), BM_url)) return;
+      const BM_currentUrl = BM_view.webContents.getURL();
+      if (
+        BM_currentUrl.startsWith('https://creator.douyin.com/') &&
+        BM_currentUrl.includes('/creator-micro/home') !== BM_url.includes('/creator-micro/home')
+      ) {
+        await BM_timeout(BM_view.loadURL('about:blank'), 5000);
+      }
       try {
-        await BM_timeout(Promise.race([BM_view.loadURL(BM_url), BM_dom]));
-      } finally {
-        if (BM_ready) BM_view.webContents.removeListener('dom-ready', BM_ready);
+        await BM_timeout(BM_view.loadURL(BM_url), 25000);
+      } catch (BM_error) {
+        if (BM_needsNavigation(BM_view.webContents.getURL(), BM_url)) throw BM_error;
+        const BM_state = await BM_timeout(BM_eval<string>('document.readyState'), 2000);
+        if (!['interactive', 'complete'].includes(BM_state)) throw BM_error;
       }
     };
     BM_view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -218,6 +301,7 @@ export async function BM_runCommentReader(): Promise<void> {
     await BM_timeout(BM_view.loadURL('about:blank'));
     BM_view.webContents.debugger.attach('1.3');
     await BM_timeout(BM_view.webContents.debugger.sendCommand('Network.enable'));
+    await BM_runtime.BM_initialize();
     let BM_current: {
       BM_work: string;
       BM_pages: ReturnType<typeof BM_parseCommentPage>[];
@@ -226,6 +310,7 @@ export async function BM_runCommentReader(): Promise<void> {
       BM_itemIds: Set<string>;
     } | null = null;
     BM_view.webContents.debugger.on('message', (_BM_event, BM_method, BM_params) => {
+      BM_network.BM_event(BM_method, BM_params);
       const BM_attempt = BM_sending;
       if (BM_attempt) {
         if (
@@ -358,15 +443,17 @@ export async function BM_runCommentReader(): Promise<void> {
         throw new Error('BM_work_out_of_scope');
       BM_current = null;
       BM_stage = 'home_navigation';
-      await BM_navigate(BM_creatorUrl);
+      if (!BM_loginWindowShown) await BM_navigate(BM_creatorUrl);
       BM_stage = 'account_read';
       let BM_identity: z.infer<typeof BM_accountSchema> | undefined;
-      const BM_homeDeadline = Date.now() + 8000;
-      while (Date.now() < BM_homeDeadline) {
-        const BM_result = await BM_timeout(
-          BM_view.webContents.executeJavaScript(BM_readAccountScript)
-        );
+      let BM_loginCode = 'BM_page_loading';
+      const BM_homeDeadline = BM_clock.now() + 20000;
+      while (BM_clock.now() < BM_homeDeadline) {
+        const BM_result = await BM_timeout(BM_eval<BM_AccountObservation>(BM_readAccountScript));
+        BM_loginCode = BM_result?.BM_code ?? 'BM_page_read_failed';
+        BM_lastAccountCode = BM_loginCode;
         const BM_account = BM_accountSchema.safeParse(BM_result?.BM_account);
+        if (BM_account.success) BM_lastAccountCode = 'BM_authenticated';
         if (BM_account.success) {
           BM_identity = BM_account.data;
           break;
@@ -374,9 +461,13 @@ export async function BM_runCommentReader(): Promise<void> {
         await BM_wait(400);
       }
       if (!BM_identity) {
-        BM_view.show();
-        BM_view.focus();
-        return { BM_state: 'login_required', BM_comments: [], BM_complete: false };
+        await BM_diagnostic();
+        if (BM_loginCode === 'BM_login_required') BM_showLogin();
+        return {
+          BM_state: BM_loginCode === 'BM_login_required' ? 'login_required' : 'page_unavailable',
+          BM_comments: [],
+          BM_complete: false,
+        };
       }
       const BM_cookies = (await BM_session.cookies.get({})).filter(
         (BM_cookie) =>
@@ -404,11 +495,11 @@ export async function BM_runCommentReader(): Promise<void> {
           }),
           { mode: 0o600 }
         );
-        BM_view.show();
-        BM_view.focus();
+        BM_showLogin();
         return { BM_state: 'account_mismatch', BM_comments: [], BM_complete: false };
       }
       BM_view.hide();
+      BM_loginWindowShown = false;
       const BM_batch = {
         BM_work: BM_request.BM_work,
         BM_pages: [] as ReturnType<typeof BM_parseCommentPage>[],
@@ -422,10 +513,10 @@ export async function BM_runCommentReader(): Promise<void> {
         `https://creator.douyin.com/creator-micro/work-management/work-detail/${BM_request.BM_work}?tabKey=commentManagement`
       );
       BM_stage = 'comment_capture';
-      const BM_deadline = Date.now() + 15000;
-      while (!BM_batch.BM_pages.length && Date.now() < BM_deadline) {
+      const BM_deadline = BM_clock.now() + 45000;
+      while (!BM_batch.BM_pages.length && BM_clock.now() < BM_deadline) {
         await BM_timeout(
-          BM_view.webContents.executeJavaScript(
+          BM_eval(
             `(()=>{const BM_el=document.querySelector('[data-comment-entry-guide-target="true"]');const BM_tab=BM_el?.closest('[role="tab"]');if(BM_el&&BM_tab?.getAttribute('aria-selected')!=='true')BM_el.click();})()`,
             true
           )
@@ -447,13 +538,12 @@ export async function BM_runCommentReader(): Promise<void> {
         if (BM_page.BM_cursor === BM_lastCursor) break;
         BM_lastCursor = BM_page.BM_cursor;
         const BM_count = BM_batch.BM_pages.length;
-        if (!(await BM_timeout(BM_view.webContents.executeJavaScript(BM_nextCommentsScript, true))))
-          break;
-        const BM_until = Date.now() + 5000;
+        if (!(await BM_timeout(BM_eval(BM_nextCommentsScript, true)))) break;
+        const BM_until = BM_clock.now() + 5000;
         while (
           BM_batch.BM_pages.length === BM_count &&
           !BM_batch.BM_failed &&
-          Date.now() < BM_until
+          BM_clock.now() < BM_until
         )
           await BM_wait(200);
         if (BM_batch.BM_pages.length === BM_count || BM_batch.BM_failed) break;
@@ -470,9 +560,9 @@ export async function BM_runCommentReader(): Promise<void> {
       BM_stage = 'account_recheck';
       await BM_navigate(BM_creatorUrl);
       let BM_after;
-      const BM_afterDeadline = Date.now() + 8000;
-      while (Date.now() < BM_afterDeadline) {
-        BM_after = await BM_timeout(BM_view.webContents.executeJavaScript(BM_readAccountScript));
+      const BM_afterDeadline = BM_clock.now() + 8000;
+      while (BM_clock.now() < BM_afterDeadline) {
+        BM_after = await BM_timeout(BM_eval<BM_AccountObservation>(BM_readAccountScript));
         if (BM_after?.BM_account) break;
         await BM_wait(400);
       }
@@ -483,6 +573,33 @@ export async function BM_runCommentReader(): Promise<void> {
         BM_comments: [...BM_comments.values()],
         BM_complete,
       };
+    };
+    const BM_verify = async (BM_input: unknown): Promise<BM_Delivery> => {
+      const BM_request = BM_sendRequestSchema.parse({ ...(BM_input as object), BM_action: 'send' });
+      if (
+        BM_request.BM_message.BM_account !== BM_config.BM_rules.BM_account ||
+        !BM_config.BM_rules.BM_works.includes(BM_request.BM_message.BM_work)
+      )
+        return BM_delivery('unknown', 'BM_target_mismatch');
+      const BM_page = await BM_poll({ BM_work: BM_request.BM_message.BM_work }, true);
+      if (!['ready', 'partial'].includes(BM_page.BM_state))
+        return BM_delivery('unknown', 'BM_' + BM_page.BM_state);
+      const BM_itemIds = BM_current!.BM_itemIds;
+      for (let BM_index = 0; BM_index < 20; BM_index++) {
+        const BM_replyId = await BM_timeout(
+          BM_eval<string | null>(BM_verifyReplyScript(BM_request, BM_itemIds, false))
+        );
+        if (BM_replyId)
+          return { BM_state: 'accepted', BM_code: 'BM_reply_confirmed', BM_reply_id: BM_replyId };
+        if (
+          !(await BM_timeout(
+            BM_eval<boolean>(BM_verifyReplyScript(BM_request, BM_itemIds, true), true)
+          ))
+        )
+          break;
+        await BM_wait(750);
+      }
+      return BM_delivery('unknown', 'BM_reply_not_confirmed');
     };
     const BM_send = async (BM_input: unknown): Promise<BM_Delivery> => {
       const BM_request = BM_sendRequestSchema.parse(BM_input);
@@ -509,12 +626,7 @@ export async function BM_runCommentReader(): Promise<void> {
       const BM_itemIds = BM_current!.BM_itemIds;
       for (const BM_action of ['open', 'fill'] as const) {
         if (
-          !(await BM_timeout(
-            BM_view.webContents.executeJavaScript(
-              BM_replyPageScript(BM_request, BM_itemIds, BM_action),
-              true
-            )
-          ))
+          !(await BM_timeout(BM_eval(BM_replyPageScript(BM_request, BM_itemIds, BM_action), true)))
         )
           return BM_delivery('blocked', 'BM_reply_control_unavailable');
         await BM_wait(250);
@@ -528,16 +640,11 @@ export async function BM_runCommentReader(): Promise<void> {
       BM_sending = BM_attempt;
       try {
         if (
-          !(await BM_timeout(
-            BM_view.webContents.executeJavaScript(
-              BM_replyPageScript(BM_request, BM_itemIds, 'submit'),
-              true
-            )
-          ))
+          !(await BM_timeout(BM_eval(BM_replyPageScript(BM_request, BM_itemIds, 'submit'), true)))
         )
           return BM_delivery('blocked', 'BM_reply_control_unavailable');
-        const BM_deadline = Date.now() + 15000;
-        while (!BM_attempt.BM_result && !BM_attempt.BM_rejected && Date.now() < BM_deadline)
+        const BM_deadline = BM_clock.now() + 15000;
+        while (!BM_attempt.BM_result && !BM_attempt.BM_rejected && BM_clock.now() < BM_deadline)
           await BM_wait(100);
         if (BM_attempt.BM_result) return BM_attempt.BM_result;
         if (!BM_attempt.BM_attempted)
@@ -562,16 +669,19 @@ export async function BM_runCommentReader(): Promise<void> {
       try {
         if (BM_line.length > 24000) throw new Error('BM_request_too_large');
         const BM_input = JSON.parse(BM_line);
-        BM_isSend = BM_input?.BM_action === 'send';
+        BM_isSend = ['send', 'verify'].includes(BM_input?.BM_action);
         const BM_result =
-          BM_input?.BM_action === 'send' ? await BM_send(BM_input) : await BM_poll(BM_input);
+          BM_input?.BM_action === 'send'
+            ? await BM_send(BM_input)
+            : BM_input?.BM_action === 'verify'
+              ? await BM_verify(BM_input)
+              : await BM_poll(BM_input);
         process.stdout.write(JSON.stringify(BM_result) + '\n');
       } catch {
         BM_current = null;
         await BM_diagnostic();
-        if (BM_stage === 'home_navigation' || BM_stage === 'account_read') {
-          BM_view.show();
-          BM_view.focus();
+        if (BM_lastAccountCode === 'BM_login_required') {
+          BM_showLogin();
         }
         process.stdout.write(
           JSON.stringify(

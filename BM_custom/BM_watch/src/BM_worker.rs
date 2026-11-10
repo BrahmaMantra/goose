@@ -92,6 +92,13 @@ pub trait BM_CommentPlatform: Send + Sync {
         true
     }
     async fn BM_submit(&self, BM_message: &BM_Comment, BM_text: &str) -> Result<()>;
+    async fn BM_verify(
+        &self,
+        _BM_message: &BM_Comment,
+        _BM_text: &str,
+    ) -> crate::BM_delivery::BM_Delivery {
+        crate::BM_delivery::BM_Delivery::BM_new("unknown", "BM_verification_unavailable")
+    }
     async fn BM_deliver(
         &self,
         BM_message: &BM_Comment,

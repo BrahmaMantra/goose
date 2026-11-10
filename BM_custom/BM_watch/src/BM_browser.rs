@@ -143,13 +143,14 @@ impl BM_Reader {
         self.BM_stdin.flush().await?;
         tokio::time::timeout(Duration::from_secs(120), self.BM_read()).await?
     }
-    async fn BM_send(
+    async fn BM_transfer(
         &mut self,
+        BM_action: &str,
         BM_message: &crate::BM_store::BM_Comment,
         BM_text: &str,
     ) -> Result<crate::BM_delivery::BM_Delivery> {
         let BM_request = serde_json::to_vec(
-            &serde_json::json!({"BM_action":"send","BM_message":BM_message,"BM_reply":BM_text}),
+            &serde_json::json!({"BM_action":BM_action,"BM_message":BM_message,"BM_reply":BM_text}),
         )?;
         self.BM_stdin.write_all(&BM_request).await?;
         self.BM_stdin.write_all(b"\n").await?;
@@ -218,6 +219,26 @@ impl BM_CommentPlatform for BM_Browser {
         );
         Ok(())
     }
+    async fn BM_verify(&self, BM_message: &BM_Comment, BM_text: &str) -> BM_Delivery {
+        let mut BM_reader = self.BM_reader.lock().await;
+        if self.BM_connect(&mut BM_reader).await.is_err() {
+            return BM_Delivery::BM_new("unknown", "BM_browser_unavailable");
+        }
+        match BM_reader
+            .as_mut()
+            .unwrap()
+            .BM_transfer("verify", BM_message, BM_text)
+            .await
+        {
+            Ok(BM_result) => BM_result,
+            Err(_) => {
+                if let Some(mut BM_failed) = BM_reader.take() {
+                    BM_failed.BM_stop().await;
+                }
+                BM_Delivery::BM_new("unknown", "BM_reply_not_confirmed")
+            }
+        }
+    }
     async fn BM_deliver(&self, BM_message: &BM_Comment, BM_text: &str) -> BM_Delivery {
         let mut BM_reader = self.BM_reader.lock().await;
         if self.BM_connect(&mut BM_reader).await.is_err() {
@@ -226,7 +247,7 @@ impl BM_CommentPlatform for BM_Browser {
         match BM_reader
             .as_mut()
             .unwrap()
-            .BM_send(BM_message, BM_text)
+            .BM_transfer("send", BM_message, BM_text)
             .await
         {
             Ok(BM_result) => BM_result,

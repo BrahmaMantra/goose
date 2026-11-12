@@ -11,6 +11,7 @@ import { BM_privateDirectory, BM_accountSchema } from './BM_privateConfig';
 import { BM_rulesSchema, BM_validReply } from './BM_types';
 import { BM_PageRuntime, BM_needsNavigation } from './BM_pageRuntime';
 import { BM_PageNetwork } from './BM_pageNetwork';
+import { BM_PageRecovery } from './BM_pageRecovery';
 import {
   BM_delivery,
   BM_sendRequestSchema,
@@ -218,6 +219,7 @@ export async function BM_runCommentReader(): Promise<void> {
     BM_view.setTitle(`抖音评论读取 · 配置账号 ${BM_config.BM_rules.BM_account}`);
     const BM_network = new BM_PageNetwork();
     const BM_runtime = new BM_PageRuntime(BM_view.webContents.debugger);
+    const BM_recovery = new BM_PageRecovery();
     let BM_stage = 'initialization';
     let BM_lastAccountCode = 'BM_page_loading';
     let BM_loginWindowShown = false;
@@ -443,7 +445,10 @@ export async function BM_runCommentReader(): Promise<void> {
         throw new Error('BM_work_out_of_scope');
       BM_current = null;
       BM_stage = 'home_navigation';
-      if (!BM_loginWindowShown) await BM_navigate(BM_creatorUrl);
+      if (!BM_loginWindowShown) {
+        if (BM_recovery.BM_reloadDue()) await BM_timeout(BM_view.loadURL('about:blank'), 5000);
+        await BM_navigate(BM_creatorUrl);
+      }
       BM_stage = 'account_read';
       let BM_identity: z.infer<typeof BM_accountSchema> | undefined;
       let BM_loginCode = 'BM_page_loading';
@@ -461,6 +466,7 @@ export async function BM_runCommentReader(): Promise<void> {
         await BM_wait(400);
       }
       if (!BM_identity) {
+        BM_recovery.BM_failed(BM_loginCode);
         await BM_diagnostic();
         if (BM_loginCode === 'BM_login_required') BM_showLogin();
         return {
@@ -469,6 +475,7 @@ export async function BM_runCommentReader(): Promise<void> {
           BM_complete: false,
         };
       }
+      BM_recovery.BM_authenticated();
       const BM_cookies = (await BM_session.cookies.get({})).filter(
         (BM_cookie) =>
           BM_cookie.domain === 'douyin.com' || BM_cookie.domain?.endsWith('.douyin.com')
@@ -679,6 +686,8 @@ export async function BM_runCommentReader(): Promise<void> {
         process.stdout.write(JSON.stringify(BM_result) + '\n');
       } catch {
         BM_current = null;
+        if (BM_stage === 'home_navigation' || BM_stage === 'account_read')
+          BM_recovery.BM_failed('BM_page_read_failed');
         await BM_diagnostic();
         if (BM_lastAccountCode === 'BM_login_required') {
           BM_showLogin();

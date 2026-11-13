@@ -11,6 +11,7 @@ import {
 } from './BM_types';
 import BM_CreateConfigView from './BM_CreateConfigView';
 import BM_ReviewSwitch from './BM_ReviewSwitch';
+import { BM_DefaultReplySettings, BM_ManualReplyActions } from './BM_ManualReply';
 
 const BM_sourceLabels: Record<string, string> = {
   manual: '未配置评论读取器',
@@ -30,7 +31,7 @@ const BM_labels: Record<string, string> = {
   processing: '处理中',
   review: '待审核',
   approved: '已批准，等待发送',
-  skipped: '已跳过',
+  skipped: '已忽略',
   failed: '失败',
   sending: '提交中',
   accepted: '平台已接受',
@@ -51,7 +52,9 @@ const BM_reviewReasons: Record<string, string> = {
   reviewer_failed: '自动审核未完成，转人工处理',
   policy_changed: '自动审核已关闭，撤回自动批准',
   manual_approved: '管理员已批准当前正文',
-  manual_rejected: '管理员已跳过',
+  manual_default: '管理员已选择默认回复',
+  manual_custom: '管理员已批准自定义回复',
+  manual_rejected: '管理员已忽略',
 };
 
 const BM_deliveryMessages: Record<string, string> = {
@@ -148,7 +151,7 @@ export default function BM_WatchView() {
       await window.electron.BM_watchSkip(BM_id);
       await BM_refresh();
     } catch {
-      BM_setError('无法跳过此记录，它的状态可能已经变化。');
+      BM_setError('无法忽略此记录，它的状态可能已经变化。');
     } finally {
       BM_setBusy(false);
     }
@@ -299,6 +302,14 @@ export default function BM_WatchView() {
                 void BM_setPolicy(BM_enabled);
               }}
             />
+            {BM_snapshot?.BM_configured && (
+              <BM_DefaultReplySettings
+                key={BM_snapshot.BM_config_name}
+                BM_snapshot={BM_snapshot}
+                BM_disabled={BM_busy || BM_creating}
+                BM_onSaved={BM_refresh}
+              />
+            )}
             {BM_snapshot?.BM_requires_restart && (
               <p role="alert" className="text-sm">
                 后台需要更新，请先停止并重新启动，以启用当前触发规则和评论读取。
@@ -505,8 +516,17 @@ export default function BM_WatchView() {
                       void BM_skip(BM_record.BM_id);
                     }}
                   >
-                    跳过
+                    忽略
                   </Button>
+                )}
+                {BM_record.BM_status === 'review' && BM_snapshot && (
+                  <BM_ManualReplyActions
+                    key={BM_record.BM_id}
+                    BM_record={BM_record}
+                    BM_snapshot={BM_snapshot}
+                    BM_disabled={BM_busy || !!BM_snapshot.BM_requires_restart}
+                    BM_onDone={BM_refresh}
+                  />
                 )}
               </article>
             ))}

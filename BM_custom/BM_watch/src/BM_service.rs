@@ -33,6 +33,7 @@ pub fn BM_router(BM_state: Arc<BM_Service>) -> Router {
         .route("/BM/records", get(BM_records))
         .route("/BM/skip", post(BM_skip))
         .route("/BM/approve", post(BM_approve))
+        .route("/BM/manual-reply", post(BM_manual_reply))
         .route("/BM/verify", post(BM_verify))
         .route("/BM/review-policy", post(BM_review_policy))
         .route("/BM/shutdown", post(BM_shutdown))
@@ -57,7 +58,7 @@ async fn BM_task(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(
-        json!({"BM_rules":BM_rules,"BM_interval_seconds":BM_state.BM_interval_seconds,"BM_write_ready":BM_state.BM_worker.BM_platform.BM_write_ready()}),
+        json!({"BM_rules":BM_rules,"BM_interval_seconds":BM_state.BM_interval_seconds,"BM_write_ready":BM_state.BM_worker.BM_platform.BM_write_ready(),"BM_manual_reply_ready":true}),
     ))
 }
 
@@ -130,6 +131,55 @@ async fn BM_approve(
     if !BM_state
         .BM_worker
         .BM_approve(BM_action.BM_id, &BM_action.BM_reply)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::CONFLICT);
+    }
+    Ok(Json(json!({"BM_approved":true})))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum BM_ManualMode {
+    Default,
+    Custom,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BM_ManualAction {
+    BM_id: i64,
+    BM_expected_reply: Option<String>,
+    BM_reply: String,
+    BM_mode: BM_ManualMode,
+}
+
+async fn BM_manual_reply(
+    State(BM_state): State<Arc<BM_Service>>,
+    BM_headers: HeaderMap,
+    Json(BM_action): Json<BM_ManualAction>,
+) -> Result<Json<Value>, StatusCode> {
+    BM_authorize(&BM_headers, &BM_state)?;
+    if BM_action.BM_id <= 0
+        || !BM_state
+            .BM_worker
+            .BM_valid_manual_reply(&BM_action.BM_reply)
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let BM_reason = match BM_action.BM_mode {
+        BM_ManualMode::Default => crate::BM_review::BM_Reason::ManualDefault,
+        BM_ManualMode::Custom => crate::BM_review::BM_Reason::ManualCustom,
+    };
+    if !BM_state
+        .BM_worker
+        .BM_manual_reply(
+            BM_action.BM_id,
+            BM_action.BM_expected_reply.as_deref(),
+            &BM_action.BM_reply,
+            BM_reason,
+        )
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     {

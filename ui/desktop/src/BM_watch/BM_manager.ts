@@ -12,6 +12,7 @@ import {
   BM_flattenConfigs,
   BM_flatConfigPath,
   BM_accountSchema,
+  BM_privateDirectory,
 } from './BM_privateConfig';
 import {
   BM_validReply,
@@ -27,6 +28,10 @@ import {
   type BM_Snapshot,
   type BM_Record,
   BM_defaultReplyMarker,
+  BM_defaultManualReply,
+  BM_markManualReply,
+  BM_validManualReply,
+  type BM_ManualReplyMode,
 } from './BM_types';
 
 function BM_errorCode(BM_error: unknown): string | undefined {
@@ -291,6 +296,7 @@ export class BM_WatchManager {
         BM_configured: true,
         BM_config_name: path.basename(BM_file),
         ...BM_config.BM_rules,
+        BM_default_reply: await this.BM_defaultReply(BM_config),
         BM_interval_seconds: BM_config.BM_interval_seconds,
       });
     } catch {
@@ -324,6 +330,7 @@ export class BM_WatchManager {
           BM_interval_seconds: BM_task.BM_interval_seconds,
           BM_running: true,
           BM_write_ready: BM_task.BM_write_ready,
+          BM_manual_reply_ready: BM_task.BM_manual_reply_ready,
           BM_requires_restart:
             BM_requires_restart ||
             (!!this.BM_readerLauncher && !BM_base.BM_source) ||
@@ -497,6 +504,97 @@ export class BM_WatchManager {
       return this.BM_snapshot();
     });
   }
+  private async BM_defaultReply(BM_config: BM_Config): Promise<string> {
+    try {
+      return z
+        .object({ BM_default_reply: z.string().min(1).max(1000) })
+        .strict()
+        .parse(
+          JSON.parse(
+            await this.BM_privateRead(
+              path.join(BM_config.BM_data_dir, 'BM_reply_preferences.local.json')
+            )
+          )
+        ).BM_default_reply;
+    } catch (BM_error) {
+      if (BM_errorCode(BM_error) === 'ENOENT') return BM_defaultManualReply;
+      throw new Error('无法读取私有默认回复设置');
+    }
+  }
+
+  async BM_setDefaultReply(BM_text: string): Promise<BM_Snapshot> {
+    z.string().trim().min(1).max(1000).parse(BM_text);
+    return this.BM_serial(async () => {
+      const BM_file = await this.BM_binding();
+      if (!BM_file) throw new Error('请先选择私有配置');
+      const BM_config = await this.BM_config(BM_file);
+      const BM_snapshot = await this.BM_snapshot();
+      if (
+        !BM_validManualReply(
+          BM_markManualReply(BM_text, BM_snapshot.BM_reply_marker),
+          BM_snapshot.BM_reply_marker,
+          BM_snapshot.BM_max_reply_chars
+        )
+      )
+        throw new Error('默认回复超过长度限制或包含控制字符');
+      await BM_outsideCheckout(BM_config.BM_data_dir);
+      await fs.mkdir(BM_config.BM_data_dir, { recursive: true, mode: 0o700 });
+      await BM_privateDirectory(BM_config.BM_data_dir);
+      const BM_target = path.join(BM_config.BM_data_dir, 'BM_reply_preferences.local.json');
+      const BM_tmp = `${BM_target}.BM_${randomUUID()}`;
+      try {
+        await fs.writeFile(BM_tmp, JSON.stringify({ BM_default_reply: BM_text.trim() }), {
+          mode: 0o600,
+          flag: 'wx',
+        });
+        await fs.rename(BM_tmp, BM_target);
+      } finally {
+        await fs.rm(BM_tmp, { force: true });
+      }
+      return this.BM_snapshot();
+    });
+  }
+
+  async BM_manualReply(
+    BM_id: number,
+    BM_expected_reply: string | null,
+    BM_reply: string,
+    BM_mode: BM_ManualReplyMode
+  ): Promise<void> {
+    z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);
+    z.string().max(4000).nullable().parse(BM_expected_reply);
+    z.enum(['default', 'custom']).parse(BM_mode);
+    z.string().min(1).max(4000).parse(BM_reply);
+    await this.BM_serial(async () => {
+      const BM_snapshot = await this.BM_snapshot();
+      if (
+        !BM_snapshot.BM_running ||
+        BM_snapshot.BM_requires_restart ||
+        !BM_snapshot.BM_manual_reply_ready
+      )
+        throw new Error('请先连接支持人工回复的新版后台');
+      if (
+        BM_mode === 'default' &&
+        BM_reply !==
+          BM_markManualReply(
+            BM_snapshot.BM_default_reply ?? BM_defaultManualReply,
+            BM_snapshot.BM_reply_marker
+          )
+      )
+        throw new Error('默认回复已变化，请重新确认');
+      if (
+        !BM_validManualReply(BM_reply, BM_snapshot.BM_reply_marker, BM_snapshot.BM_max_reply_chars)
+      )
+        throw new Error('回复长度或标记不符合要求');
+      await this.BM_request(await this.BM_connection(), '/BM/manual-reply', 'POST', {
+        BM_id,
+        BM_expected_reply,
+        BM_reply,
+        BM_mode,
+      });
+    });
+  }
+
   async BM_approve(BM_id: number, BM_reply: string): Promise<void> {
     z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(BM_id);
     z.string().min(1).max(4000).parse(BM_reply);

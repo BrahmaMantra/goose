@@ -7,6 +7,7 @@ beforeEach(() => {
   BM_snapshot = {
     BM_configured: true,
     BM_auto_review: false,
+    BM_manual_reply_ready: true,
     BM_config_name: 'BM_watch.local.json',
     BM_running: true,
     BM_write_ready: false,
@@ -52,6 +53,8 @@ beforeEach(() => {
     }),
     BM_watchSkip: vi.fn(async () => undefined),
     BM_watchApprove: vi.fn(async () => undefined),
+    BM_watchSetDefaultReply: vi.fn(async () => BM_snapshot),
+    BM_watchManualReply: vi.fn(async () => undefined),
     BM_watchVerify: vi.fn(async () => true),
     BM_watchSetAutoReview: vi.fn(async (BM_enabled: boolean) => {
       BM_snapshot = { ...BM_snapshot, BM_auto_review: BM_enabled };
@@ -67,7 +70,7 @@ describe('BM watch desktop page', () => {
     fireEvent.click(screen.getByRole('button', { name: '暂停值守' }));
     await waitFor(() => expect(window.electron.BM_watchAction).toHaveBeenCalledWith('pause'));
     await screen.findByRole('button', { name: '开始值守' });
-    fireEvent.click(screen.getByRole('button', { name: '跳过' }));
+    fireEvent.click(screen.getByRole('button', { name: '忽略' }));
     await waitFor(() => expect(window.electron.BM_watchSkip).toHaveBeenCalledWith(1));
     expect(screen.getByText(/发送功能未启用，已批准回复不会发送/)).toBeInTheDocument();
   });
@@ -155,7 +158,7 @@ it('shows approved replies as waiting for sending and permits withdrawal', async
   expect(screen.getAllByText('已批准，等待发送').length).toBeGreaterThan(0);
   expect(screen.getByText(/普通交流，符合低风险条件/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '批准此回复' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '跳过' }));
+  fireEvent.click(screen.getByRole('button', { name: '忽略' }));
   await waitFor(() => expect(window.electron.BM_watchSkip).toHaveBeenCalledWith(2));
 });
 it('blocks review controls until the backend is upgraded', async () => {
@@ -164,6 +167,52 @@ it('blocks review controls until the backend is upgraded', async () => {
   await screen.findByText('BM candidate');
   expect(screen.getByRole('switch', { name: '自动审核' })).toBeDisabled();
   expect(screen.getByRole('button', { name: '批准此回复' })).toBeDisabled();
+});
+
+it('previews the default reply and approves only after explicit confirmation', async () => {
+  BM_snapshot.BM_default_reply = '感谢留言，稍后再聊。';
+  render(<BM_WatchView />);
+  await screen.findByText('BM candidate');
+  fireEvent.click(screen.getByRole('button', { name: '默认回复' }));
+  expect(window.electron.BM_watchManualReply).not.toHaveBeenCalled();
+  expect(
+    screen.getByText(`${BM_snapshot.BM_reply_marker} 感谢留言，稍后再聊。`)
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '确认并批准发送' }));
+  await waitFor(() =>
+    expect(window.electron.BM_watchManualReply).toHaveBeenCalledWith(
+      1,
+      'BM candidate',
+      `${BM_snapshot.BM_reply_marker} 感谢留言，稍后再聊。`,
+      'default'
+    )
+  );
+});
+
+it('validates a custom reply and leaves the original candidate unchanged until confirmation', async () => {
+  render(<BM_WatchView />);
+  await screen.findByText('BM candidate');
+  fireEvent.click(screen.getByRole('button', { name: '自定义回复' }));
+  expect(screen.getByRole('button', { name: '确认并批准发送' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('自定义回复正文'), {
+    target: { value: BM_snapshot.BM_reply_marker },
+  });
+  expect(screen.getByRole('button', { name: '确认并批准发送' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('自定义回复正文'), { target: { value: 'x'.repeat(200) } });
+  expect(screen.getByRole('button', { name: '确认并批准发送' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('自定义回复正文'), {
+    target: { value: '收到，谢谢你的建议。' },
+  });
+  expect(screen.getByText('BM candidate')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '确认并批准发送' }));
+  await waitFor(() =>
+    expect(window.electron.BM_watchManualReply).toHaveBeenCalledWith(
+      1,
+      'BM candidate',
+      `${BM_snapshot.BM_reply_marker} 收到，谢谢你的建议。`,
+      'custom'
+    )
+  );
 });
 
 it('offers only readback for unknown results and never approves or retries them', async () => {

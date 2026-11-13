@@ -185,6 +185,93 @@ async fn BM_off_requires_manual_approval_and_sends_exactly_once_without_regenera
 }
 
 #[tokio::test]
+async fn BM_manual_replies_bind_original_text_and_send_once_with_audit() {
+    for BM_reason in [BM_Reason::ManualDefault, BM_Reason::ManualCustom] {
+        let BM_temp = tempfile::tempdir().unwrap();
+        let BM_path = BM_temp.path().join("BM_queue.sqlite");
+        let BM_fixture = Arc::new(BM_Fixture::BM_new(BM_Risk::Risky));
+        BM_fixture.BM_ready.store(true, Ordering::SeqCst);
+        let BM_worker = BM_setup(&BM_path, BM_fixture.clone()).await;
+        BM_worker.BM_set_auto_review(true).await.unwrap();
+        BM_enqueue(&BM_worker, "BM_manual", "你好").await;
+        BM_worker
+            .BM_batch(1, CancellationToken::new())
+            .await
+            .unwrap();
+        let BM_record = BM_worker.BM_store.BM_records(None).await.unwrap().remove(0);
+        assert_eq!(BM_record.BM_status, "review");
+        let BM_reply = BM_worker.BM_rules.BM_mark_reply("感谢留言，暂时无法回答。");
+        assert!(!BM_worker.BM_valid_manual_reply(&BM_worker.BM_rules.BM_reply_marker));
+        assert!(BM_worker
+            .BM_manual_reply(
+                BM_record.BM_id,
+                BM_record.BM_reply.as_deref(),
+                "未标记正文",
+                BM_reason.clone()
+            )
+            .await
+            .is_err());
+        assert!(!BM_worker
+            .BM_manual_reply(
+                BM_record.BM_id,
+                Some("BM_stale"),
+                &BM_reply,
+                BM_reason.clone()
+            )
+            .await
+            .unwrap());
+        assert!(BM_worker
+            .BM_manual_reply(
+                BM_record.BM_id,
+                BM_record.BM_reply.as_deref(),
+                &BM_reply,
+                BM_reason.clone()
+            )
+            .await
+            .unwrap());
+        assert!(!BM_worker
+            .BM_manual_reply(
+                BM_record.BM_id,
+                BM_record.BM_reply.as_deref(),
+                &BM_reply,
+                BM_reason.clone()
+            )
+            .await
+            .unwrap());
+        let BM_approved = BM_worker.BM_store.BM_records(None).await.unwrap().remove(0);
+        assert_eq!(
+            BM_approved.BM_review.unwrap().BM_assessment.BM_reason,
+            BM_reason
+        );
+        BM_worker.BM_set_auto_review(false).await.unwrap();
+        assert_eq!(
+            BM_worker.BM_store.BM_records(None).await.unwrap()[0].BM_status,
+            "approved"
+        );
+        BM_worker
+            .BM_batch(2, CancellationToken::new())
+            .await
+            .unwrap();
+        BM_worker
+            .BM_batch(2, CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(*BM_fixture.BM_sent.lock().await, vec![BM_reply]);
+        assert_eq!(BM_fixture.BM_generated.load(Ordering::SeqCst), 1);
+        assert_eq!(BM_fixture.BM_reviewed.load(Ordering::SeqCst), 1);
+        let BM_db = sqlx::SqlitePool::connect(&format!("sqlite://{}", BM_path.display()))
+            .await
+            .unwrap();
+        let BM_original: String =
+            sqlx::query_scalar("SELECT BM_reply FROM BM_reviews ORDER BY BM_id LIMIT 1")
+                .fetch_one(&BM_db)
+                .await
+                .unwrap();
+        assert_eq!(Some(BM_original), BM_record.BM_reply);
+    }
+}
+
+#[tokio::test]
 async fn BM_on_approves_only_low_risk_and_keeps_disabled_sender_pending() {
     for BM_risk in [BM_Risk::Low, BM_Risk::Risky, BM_Risk::Uncertain] {
         let BM_temp = tempfile::tempdir().unwrap();

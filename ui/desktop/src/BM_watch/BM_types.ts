@@ -15,6 +15,25 @@ export const BM_statusNames = [
   'rejected',
 ] as const;
 export const BM_defaultReplyMarker = '【from DeepSeek-V4.1-Flash-1017】';
+export const BM_defaultManualReply = '感谢你的留言，这条评论暂时无法自动回答。';
+export type BM_ManualReplyMode = 'default' | 'custom';
+export function BM_markManualReply(BM_text: string, BM_marker: string): string {
+  const BM_trimmed = BM_text.trim();
+  return !BM_trimmed || BM_trimmed.startsWith(BM_marker)
+    ? BM_trimmed
+    : `${BM_marker} ${BM_trimmed}`;
+}
+export function BM_validManualReply(
+  BM_reply: string,
+  BM_marker: string,
+  BM_maxChars: number
+): boolean {
+  return (
+    BM_validReply(BM_reply, BM_maxChars) &&
+    BM_reply.startsWith(BM_marker) &&
+    BM_reply.slice(BM_marker.length).trim().length > 0
+  );
+}
 export function BM_hasControlChars(BM_value: string): boolean {
   return Array.from(BM_value).some((BM_char) => {
     const BM_code = BM_char.codePointAt(0)!;
@@ -74,6 +93,7 @@ export const BM_taskSchema = z
     BM_rules: BM_rulesSchema,
     BM_interval_seconds: z.number().int().positive(),
     BM_write_ready: z.boolean().default(false),
+    BM_manual_reply_ready: z.boolean().default(false),
   })
   .strict();
 export const BM_statusSchema = z
@@ -131,6 +151,8 @@ export const BM_recordSchema = z
               'reviewer_failed',
               'policy_changed',
               'manual_approved',
+              'manual_default',
+              'manual_custom',
               'manual_rejected',
             ]),
           })
@@ -159,6 +181,8 @@ export interface BM_Snapshot {
   BM_works: string[];
   BM_deny_contains: string[];
   BM_reply_marker: string;
+  BM_default_reply?: string;
+  BM_manual_reply_ready?: boolean;
   BM_requires_restart?: boolean;
   BM_source?: BM_SourceStatus;
   BM_max_reply_chars: number;

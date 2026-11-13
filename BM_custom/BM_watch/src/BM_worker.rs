@@ -139,6 +139,13 @@ impl BM_Worker {
             && !BM_reply.chars().any(char::is_control)
     }
 
+    pub fn BM_valid_manual_reply(&self, BM_reply: &str) -> bool {
+        self.BM_valid_reply(BM_reply)
+            && BM_reply
+                .strip_prefix(&self.BM_rules.BM_reply_marker)
+                .is_some_and(|BM_text| !BM_text.trim().is_empty())
+    }
+
     pub async fn BM_approve(&self, BM_id: i64, BM_reply: &str) -> Result<bool> {
         ensure!(
             BM_id > 0 && self.BM_valid_reply(BM_reply),
@@ -146,6 +153,28 @@ impl BM_Worker {
         );
         let _BM_guard = self.BM_gate.lock().await;
         self.BM_store.BM_approve(BM_id, BM_reply).await
+    }
+
+    pub async fn BM_manual_reply(
+        &self,
+        BM_id: i64,
+        BM_expected_reply: Option<&str>,
+        BM_reply: &str,
+        BM_reason: BM_Reason,
+    ) -> Result<bool> {
+        ensure!(
+            BM_id > 0
+                && self.BM_valid_manual_reply(BM_reply)
+                && matches!(
+                    BM_reason,
+                    BM_Reason::ManualDefault | BM_Reason::ManualCustom
+                ),
+            "invalid manual reply"
+        );
+        let _BM_guard = self.BM_gate.lock().await;
+        self.BM_store
+            .BM_replace_and_approve(BM_id, BM_expected_reply, BM_reply, BM_reason)
+            .await
     }
 
     pub async fn BM_skip(&self, BM_id: i64) -> Result<bool> {

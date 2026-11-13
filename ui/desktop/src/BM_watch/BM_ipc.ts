@@ -89,6 +89,23 @@ export function BM_registerWatchIpc(
     BM_requireWindow(BM_event);
     return BM_manager.BM_verify(BM_id);
   });
+  ipcMain.handle('BM-watch:default-reply', (BM_event, BM_text: string) => {
+    BM_requireWindow(BM_event);
+    return BM_manager.BM_setDefaultReply(BM_text);
+  });
+  ipcMain.handle(
+    'BM-watch:manual-reply',
+    (
+      BM_event,
+      BM_id: number,
+      BM_expected_reply: string | null,
+      BM_reply: string,
+      BM_mode: import('./BM_types').BM_ManualReplyMode
+    ) => {
+      BM_requireWindow(BM_event);
+      return BM_manager.BM_manualReply(BM_id, BM_expected_reply, BM_reply, BM_mode);
+    }
+  );
   ipcMain.handle('BM-watch:skip', (BM_event, BM_id: number) => {
     BM_requireWindow(BM_event);
     return BM_manager.BM_skip(BM_id);

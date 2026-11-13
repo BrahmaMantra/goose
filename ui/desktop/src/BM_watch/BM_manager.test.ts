@@ -25,6 +25,7 @@ let BM_policyFailure: boolean;
 let BM_extra: boolean;
 let BM_legacyTask: boolean;
 let BM_routes: string[];
+let BM_manualBodies: unknown[];
 const BM_token = 'BM_synthetic_control_token_12345';
 const BM_rules = {
   BM_auto_review: false,
@@ -38,6 +39,7 @@ const BM_rules = {
 beforeEach(async () => {
   vi.clearAllMocks();
   BM_routes = [];
+  BM_manualBodies = [];
   BM_enabled = true;
   BM_autoReview = false;
   BM_policyFailure = false;
@@ -70,7 +72,19 @@ beforeEach(async () => {
           : { ...BM_rules, BM_auto_review: BM_autoReview },
         BM_interval_seconds: 30,
         BM_write_ready: false,
+        BM_manual_reply_ready: true,
       };
+    if (BM_request.url === '/BM/manual-reply') {
+      let BM_body = '';
+      BM_request.on('data', (BM_chunk) => {
+        BM_body += BM_chunk;
+      });
+      BM_request.on('end', () => {
+        BM_manualBodies.push(JSON.parse(BM_body));
+        BM_response.end(JSON.stringify({ BM_approved: true }));
+      });
+      return;
+    }
     if (BM_request.url?.startsWith('/BM/records')) BM_value = { BM_records: [] };
     if (BM_request.url === '/BM/pause') {
       BM_enabled = false;
@@ -121,6 +135,36 @@ afterEach(async () => {
 });
 
 describe('BM desktop manager boundary', () => {
+  it('persists per-config defaults privately without approval or sending', async () => {
+    await BM_manager.BM_bind(BM_file);
+    await BM_manager.BM_setDefaultReply('谢谢留言，暂时无法回答。');
+    const BM_prefs = path.join(BM_root, 'BM_data', 'BM_reply_preferences.local.json');
+    expect((await fs.stat(BM_prefs)).mode & 0o777).toBe(0o600);
+    expect(JSON.parse(await fs.readFile(BM_prefs, 'utf8')).BM_default_reply).toBe(
+      '谢谢留言，暂时无法回答。'
+    );
+    expect((await new BM_WatchManager(BM_binding, BM_binary).BM_snapshot()).BM_default_reply).toBe(
+      '谢谢留言，暂时无法回答。'
+    );
+    expect(BM_routes).not.toContain('/BM/manual-reply');
+    expect(BM_routes).not.toContain('/BM/approve');
+    await expect(BM_manager.BM_setDefaultReply('x'.repeat(200))).rejects.toThrow('长度');
+  });
+  it('binds manual approval to the original candidate and the confirmed full reply', async () => {
+    await BM_manager.BM_bind(BM_file);
+    const BM_reply = `${BM_rules.BM_reply_marker} 收到，谢谢。`;
+    await BM_manager.BM_manualReply(1, 'BM original', BM_reply, 'custom');
+    expect(BM_manualBodies).toEqual([
+      { BM_id: 1, BM_expected_reply: 'BM original', BM_reply, BM_mode: 'custom' },
+    ]);
+    await expect(BM_manager.BM_manualReply(1, 'BM original', BM_reply, 'default')).rejects.toThrow(
+      '默认回复'
+    );
+    await expect(
+      BM_manager.BM_manualReply(1, 'BM original', '未标记的正文', 'custom')
+    ).rejects.toThrow('标记');
+    expect(BM_manualBodies).toHaveLength(1);
+  });
   it('keeps old backends controllable but refuses resume until rules are upgraded', async () => {
     BM_legacyTask = true;
     const BM_snapshot = await BM_manager.BM_bind(BM_file);

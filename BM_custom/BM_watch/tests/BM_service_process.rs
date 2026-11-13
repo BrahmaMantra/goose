@@ -292,6 +292,36 @@ async fn BM_process_auth_batches_and_restart() {
         );
     }
     assert_eq!(BM_store.BM_counts().await.unwrap()["approved"], 1);
+    let mut BM_manual_comment = BM_comment.clone();
+    BM_manual_comment.BM_comment = "BM_manual_reply".into();
+    BM_store.BM_enqueue(&BM_manual_comment).await.unwrap();
+    let (BM_manual_id, _) = BM_store.BM_claim().await.unwrap().unwrap();
+    BM_store
+        .BM_finish(BM_manual_id, "review", Some("合成原候选"))
+        .await
+        .unwrap();
+    let BM_manual_reply = "【from DeepSeek-V4.1-Flash-1017】 合成自定义回复";
+    for (BM_auth, BM_origin, BM_original, BM_reply, BM_expected) in [
+        (false, false, "合成原候选", BM_manual_reply, 401),
+        (true, true, "合成原候选", BM_manual_reply, 403),
+        (true, false, "合成原候选", "未标记正文", 400),
+        (true, false, "过期候选", BM_manual_reply, 409),
+        (true, false, "合成原候选", BM_manual_reply, 200),
+        (true, false, "合成原候选", BM_manual_reply, 409),
+    ] {
+        let mut BM_request = BM_http.post(format!("{BM_base}/BM/manual-reply"))
+            .json(&json!({"BM_id":BM_manual_id,"BM_expected_reply":BM_original,"BM_reply":BM_reply,"BM_mode":"custom"}));
+        if BM_auth {
+            BM_request = BM_request.bearer_auth(BM_token);
+        }
+        if BM_origin {
+            BM_request = BM_request.header("Origin", "https://example.com");
+        }
+        assert_eq!(
+            BM_request.send().await.unwrap().status().as_u16(),
+            BM_expected
+        );
+    }
     let BM_second = Command::new(env!("CARGO_BIN_EXE_BM_watch"))
         .arg("--config")
         .arg(&BM_path)
@@ -360,7 +390,7 @@ async fn BM_process_auth_batches_and_restart() {
     assert_eq!(BM_source["BM_complete"], false);
     assert_eq!(BM_status["BM_enabled"], false);
     assert_eq!(BM_status["BM_counts"]["review"], 1);
-    assert_eq!(BM_status["BM_counts"]["approved"], 1);
+    assert_eq!(BM_status["BM_counts"]["approved"], 2);
     assert_eq!(BM_status["BM_counts"]["skipped"], 1);
 }
 

@@ -185,6 +185,32 @@ impl BM_Store {
         Ok(BM_result.rows_affected() == 1)
     }
 
+    pub async fn BM_replace_and_approve(
+        &self,
+        BM_id: i64,
+        BM_expected_reply: Option<&str>,
+        BM_reply: &str,
+        BM_reason: BM_Reason,
+    ) -> Result<bool> {
+        let mut BM_tx = self.BM_pool.begin().await?;
+        let BM_result = sqlx::query("UPDATE BM_inbox SET BM_status='approved',BM_reply=? WHERE BM_id=? AND BM_status='review' AND BM_reply IS ?")
+            .bind(BM_reply).bind(BM_id).bind(BM_expected_reply).execute(&mut *BM_tx).await?;
+        if BM_result.rows_affected() == 1 {
+            let BM_audit = BM_ReviewAudit::BM_new(
+                BM_Assessment::BM_new(BM_Risk::Uncertain, BM_reason),
+                "admin",
+            );
+            sqlx::query("INSERT INTO BM_reviews(BM_record,BM_audit,BM_reply) VALUES(?,?,?)")
+                .bind(BM_id)
+                .bind(serde_json::to_string(&BM_audit)?)
+                .bind(BM_reply)
+                .execute(&mut *BM_tx)
+                .await?;
+        }
+        BM_tx.commit().await?;
+        Ok(BM_result.rows_affected() == 1)
+    }
+
     pub async fn BM_next_approved(&self) -> Result<Option<(i64, BM_Comment, String)>> {
         let BM_row = sqlx::query("SELECT BM_id,BM_payload,BM_reply FROM BM_inbox WHERE BM_status='approved' ORDER BY BM_id LIMIT 1")
             .fetch_optional(&self.BM_pool).await?;

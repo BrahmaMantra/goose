@@ -117,6 +117,13 @@ type ElectronAPI = {
   BM_watchSetAutoReview: (BM_enabled: boolean) => Promise<BM_Snapshot>;
   BM_watchApprove: (BM_id: number, BM_reply: string) => Promise<void>;
   BM_watchVerify: (BM_id: number) => Promise<boolean>;
+  BM_watchSetDefaultReply: (BM_text: string) => Promise<BM_Snapshot>;
+  BM_watchManualReply: (
+    BM_id: number,
+    BM_expected_reply: string | null,
+    BM_reply: string,
+    BM_mode: import('./BM_watch/BM_types').BM_ManualReplyMode
+  ) => Promise<void>;
   platform: string;
   arch: string;
   reactReady: () => void;
@@ -222,6 +229,9 @@ const electronAPI: ElectronAPI = {
   BM_watchSetAutoReview: (BM_enabled) => ipcRenderer.invoke('BM-watch:review-policy', BM_enabled),
   BM_watchApprove: (BM_id, BM_reply) => ipcRenderer.invoke('BM-watch:approve', BM_id, BM_reply),
   BM_watchVerify: (BM_id) => ipcRenderer.invoke('BM-watch:verify', BM_id),
+  BM_watchSetDefaultReply: (BM_text) => ipcRenderer.invoke('BM-watch:default-reply', BM_text),
+  BM_watchManualReply: (BM_id, BM_expected_reply, BM_reply, BM_mode) =>
+    ipcRenderer.invoke('BM-watch:manual-reply', BM_id, BM_expected_reply, BM_reply, BM_mode),
   platform: process.platform,
   arch: process.arch,
   reactReady: () => ipcRenderer.send('react-ready'),

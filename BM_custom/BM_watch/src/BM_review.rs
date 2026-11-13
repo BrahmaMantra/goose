@@ -29,6 +29,8 @@ pub enum BM_Reason {
     ReviewerFailed,
     PolicyChanged,
     ManualApproved,
+    ManualDefault,
+    ManualCustom,
     ManualRejected,
 }
 

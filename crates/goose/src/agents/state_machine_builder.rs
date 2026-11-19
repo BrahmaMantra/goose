@@ -30,6 +30,8 @@ use crate::session::{Session, SessionManager};
 use crate::tool_inspection::ToolInspectionManager;
 
 pub(crate) struct StateMachineConfig<'a> {
+    #[allow(non_snake_case)]
+    pub(crate) BM_disable_skills: bool,
     pub(crate) provider: Arc<dyn Provider>,
     pub(crate) model_config: ModelConfig,
     pub(crate) context_limit: usize,
@@ -89,10 +91,12 @@ fn typesafe_provider(config: &Config) -> anyhow::Result<Arc<dyn DecisionProvider
     Ok(Arc::new(TypeSafeProvider::new(client)))
 }
 
+#[allow(non_snake_case)]
 pub(crate) fn build_state_machine(
     config: StateMachineConfig<'_>,
 ) -> StateMachine<'_, Session, GooseEffect> {
     let StateMachineConfig {
+        BM_disable_skills,
         provider,
         model_config,
         context_limit,
@@ -128,10 +132,14 @@ pub(crate) fn build_state_machine(
         Arc::new(PreToolCallHookOperation::new(Arc::new(
             GoosePreToolHook::new(hook_manager.clone(), Arc::clone(&extension_lease)),
         ))),
-        Arc::new(SkillOperation::new(
+    ];
+    if !BM_disable_skills {
+        operations.push(Arc::new(SkillOperation::new(
             Arc::clone(&extension_lease),
             Arc::clone(&post_tool_call_hook),
-        )),
+        )));
+    }
+    let execution_operations: Vec<Arc<dyn Operation<Session, GooseEffect> + '_>> = vec![
         Arc::new(RecipeOperation::new(
             provider.clone(),
             Arc::clone(&extension_manager),
@@ -158,6 +166,7 @@ pub(crate) fn build_state_machine(
         Arc::new(SteerOperation::new(steer_queue, hook_manager.clone())),
         Arc::new(BangShellOperation::new()),
     ];
+    operations.extend(execution_operations);
     if !manages_own_context {
         if let Some(decisions) = context_relevance {
             operations.push(Arc::new(ContextRelevanceOperation::new(

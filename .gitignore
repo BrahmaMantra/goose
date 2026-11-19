@@ -63,6 +63,11 @@ do_not_version/
 /temporal.db
 /ui/desktop/src/bin/goose-scheduler-executor
 /ui/desktop/src/bin/goose
+/ui/desktop/src/bin/goose.BM_new
+/ui/desktop/src/bin/BM_watch
+/ui/desktop/src/bin/BM_watch.exe
+/ui/desktop/src/bin/BM_watch.BM_new
+/ui/desktop/dist/
 /.env
 
 /working_dir
@@ -101,6 +106,11 @@ gooseselftest/
 live-in-desktop-design
 
 # BM_ Private runtime data (public repository contains examples and source only)
+/.local/
+**/BM_*.local.*
+**/BM_watch.binding.json
+**/BM_watch.binding.json.BM_*
+**/BM_queue.sqlite*
 /BM_private/
 /BM_local/
 /BM_runtime/
@@ -114,5 +124,10 @@ live-in-desktop-design
 /BM_custom/**/BM_secrets/
 /BM_custom/**/BM_venv/
 /BM_custom/**/*.local.*
+/.goose/
+**/BM_profile_*/
+**/BM_watch.local.json
+**/BM_watch_*.local.json
+**/BM_account.local.json
 /BM_custom/**/.env
 /BM_custom/**/.env.*

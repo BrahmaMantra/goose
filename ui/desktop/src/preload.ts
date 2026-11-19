@@ -1,6 +1,7 @@
 import Electron, { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { Recipe } from './recipe';
 import type { GooseApp } from './types/apps';
+import type { BM_ConfigEntry, BM_Record, BM_Snapshot, BM_WatchAction } from './BM_watch/BM_types';
 import type { Settings, SettingKey } from './utils/settings';
 import { defaultSettings } from './utils/settings';
 import type { OpenExternalUrlResult } from './utils/urlSecurity';
@@ -98,6 +99,31 @@ export interface CreateChatWindowOptions {
 
 // Define the API types in a single place
 type ElectronAPI = {
+  BM_watchListConfigs: () => Promise<BM_ConfigEntry[]>;
+  BM_watchSelectConfig: (BM_id: string) => Promise<BM_Snapshot>;
+  BM_watchLogin: (
+    BM_action: 'open' | 'confirm' | 'cancel'
+  ) => Promise<import('./BM_watch/BM_login').BM_LoginResult>;
+  BM_watchCreateConfig: (
+    BM_input: import('./BM_watch/BM_privateConfig').BM_CreateConfig
+  ) => Promise<BM_Snapshot>;
+  BM_watchListWorks: (
+    BM_action: import('./BM_watch/BM_works').BM_WorksAction
+  ) => Promise<import('./BM_watch/BM_works').BM_WorksResult>;
+  BM_watchSnapshot: () => Promise<BM_Snapshot>;
+  BM_watchAction: (BM_action: BM_WatchAction) => Promise<BM_Snapshot>;
+  BM_watchRecords: (BM_before?: number) => Promise<BM_Record[]>;
+  BM_watchSkip: (BM_id: number) => Promise<void>;
+  BM_watchSetAutoReview: (BM_enabled: boolean) => Promise<BM_Snapshot>;
+  BM_watchApprove: (BM_id: number, BM_reply: string) => Promise<void>;
+  BM_watchVerify: (BM_id: number) => Promise<boolean>;
+  BM_watchSetDefaultReply: (BM_text: string) => Promise<BM_Snapshot>;
+  BM_watchManualReply: (
+    BM_id: number,
+    BM_expected_reply: string | null,
+    BM_reply: string,
+    BM_mode: import('./BM_watch/BM_types').BM_ManualReplyMode
+  ) => Promise<void>;
   platform: string;
   arch: string;
   reactReady: () => void;
@@ -191,6 +217,21 @@ type AppConfigAPI = {
 };
 
 const electronAPI: ElectronAPI = {
+  BM_watchListConfigs: () => ipcRenderer.invoke('BM-watch:configs'),
+  BM_watchSelectConfig: (BM_id) => ipcRenderer.invoke('BM-watch:select', BM_id),
+  BM_watchLogin: (BM_action) => ipcRenderer.invoke('BM-watch:login', BM_action),
+  BM_watchCreateConfig: (BM_input) => ipcRenderer.invoke('BM-watch:create', BM_input),
+  BM_watchListWorks: (BM_action) => ipcRenderer.invoke('BM-watch:works', BM_action),
+  BM_watchSnapshot: () => ipcRenderer.invoke('BM-watch:snapshot'),
+  BM_watchAction: (BM_action) => ipcRenderer.invoke('BM-watch:action', BM_action),
+  BM_watchRecords: (BM_before) => ipcRenderer.invoke('BM-watch:records', BM_before),
+  BM_watchSkip: (BM_id) => ipcRenderer.invoke('BM-watch:skip', BM_id),
+  BM_watchSetAutoReview: (BM_enabled) => ipcRenderer.invoke('BM-watch:review-policy', BM_enabled),
+  BM_watchApprove: (BM_id, BM_reply) => ipcRenderer.invoke('BM-watch:approve', BM_id, BM_reply),
+  BM_watchVerify: (BM_id) => ipcRenderer.invoke('BM-watch:verify', BM_id),
+  BM_watchSetDefaultReply: (BM_text) => ipcRenderer.invoke('BM-watch:default-reply', BM_text),
+  BM_watchManualReply: (BM_id, BM_expected_reply, BM_reply, BM_mode) =>
+    ipcRenderer.invoke('BM-watch:manual-reply', BM_id, BM_expected_reply, BM_reply, BM_mode),
   platform: process.platform,
   arch: process.arch,
   reactReady: () => ipcRenderer.send('react-ready'),
